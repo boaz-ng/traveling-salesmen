@@ -4,7 +4,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 
-from app.flights.amadeus_client import search_flights
+from app.flights.serpapi_client import search_flights
 from app.flights.regions import resolve_region
 from app.flights.scoring import score_flights
 from app.schemas.flight import FlightOption

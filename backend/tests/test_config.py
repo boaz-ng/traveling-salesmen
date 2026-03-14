@@ -28,17 +28,9 @@ class TestSettingsDefaults:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.qwen_base_url == ""
 
-    def test_amadeus_api_key_defaults_to_empty(self):
+    def test_serpapi_api_key_defaults_to_empty(self):
         s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_api_key == ""
-
-    def test_amadeus_api_secret_defaults_to_empty(self):
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_api_secret == ""
-
-    def test_amadeus_env_defaults_to_test(self):
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_env == "test"
+        assert s.serpapi_api_key == ""
 
 
 class TestSettingsFromEnv:
@@ -69,20 +61,10 @@ class TestSettingsFromEnv:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.qwen_base_url == "https://custom.endpoint/v1"
 
-    def test_amadeus_api_key_from_env(self, monkeypatch):
-        monkeypatch.setenv("AMADEUS_API_KEY", "amadeus-test-key")
+    def test_serpapi_api_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-test-key")
         s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_api_key == "amadeus-test-key"
-
-    def test_amadeus_api_secret_from_env(self, monkeypatch):
-        monkeypatch.setenv("AMADEUS_API_SECRET", "amadeus-test-secret")
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_api_secret == "amadeus-test-secret"
-
-    def test_amadeus_env_from_env(self, monkeypatch):
-        monkeypatch.setenv("AMADEUS_ENV", "production")
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
-        assert s.amadeus_env == "production"
+        assert s.serpapi_api_key == "serpapi-test-key"
 
 
 class TestSettingsMultipleEnvVars:
@@ -93,16 +75,14 @@ class TestSettingsMultipleEnvVars:
         monkeypatch.setenv("QWEN_API_KEY", "sk-qwen-123")
         monkeypatch.setenv("QWEN_BASE_URL", "https://example.com/v1")
         monkeypatch.setenv("LLM_MODEL", "qwen-max")
-        monkeypatch.setenv("AMADEUS_API_KEY", "am-key")
-        monkeypatch.setenv("AMADEUS_API_SECRET", "am-secret")
+        monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-key")
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.llm_provider == "qwen"
         assert s.qwen_api_key == "sk-qwen-123"
         assert s.qwen_base_url == "https://example.com/v1"
         assert s.llm_model == "qwen-max"
-        assert s.amadeus_api_key == "am-key"
-        assert s.amadeus_api_secret == "am-secret"
+        assert s.serpapi_api_key == "serpapi-key"
 
     def test_full_anthropic_config(self, monkeypatch):
         monkeypatch.setenv("LLM_PROVIDER", "anthropic")

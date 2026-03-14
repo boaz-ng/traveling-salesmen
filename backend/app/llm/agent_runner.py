@@ -4,7 +4,7 @@ This module wires the Claude Agent SDK to the existing domain logic:
 
 - The agent uses the same SYSTEM_PROMPT behavior description.
 - Custom tools delegate to ``handle_tool_call`` for ``resolve_region`` and
-  ``search_flights`` so we reuse all existing Amadeus integration and scoring.
+  ``search_flights`` so we reuse all existing SerpApi integration and scoring.
 - ``run_agent_session`` exposes a simple interface compatible with the
   existing orchestrator: it takes a message history and returns
   ``(assistant_text, flights_or_none)``.
@@ -12,9 +12,10 @@ This module wires the Claude Agent SDK to the existing domain logic:
 
 from __future__ import annotations
 
-from typing import Any, AsyncGenerator, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, query, tool
+from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock
 
 from app.llm.prompts import SYSTEM_PROMPT
 from app.llm.provider import handle_tool_call
@@ -75,8 +76,8 @@ flight_tools_server = create_sdk_mcp_server(
 )
 
 
-def _format_message_history(messages: Iterable[Dict[str, Any]]) -> str:
-    """Render a simple text transcript from the existing message history."""
+def _build_prompt(messages: List[Dict[str, Any]]) -> str:
+    """Render the conversation history as a plain-text transcript for Claude."""
     lines: list[str] = []
     for msg in messages:
         role = msg.get("role", "user")
@@ -85,17 +86,6 @@ def _format_message_history(messages: Iterable[Dict[str, Any]]) -> str:
             continue
         lines.append(f"{role}: {content}")
     return "\n".join(lines)
-
-
-async def _message_stream(messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
-    """Async generator used as the Agent SDK prompt stream.
-
-    Custom tools are only available in streaming-input mode, so we provide the
-    full conversation transcript as a single chunk.
-    """
-    transcript = _format_message_history(messages)
-    if transcript:
-        yield transcript
 
 
 async def run_agent_session(
@@ -115,13 +105,18 @@ async def run_agent_session(
     options = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={"flight-tools": flight_tools_server},
-        # Let the SDK manage the model/version; can be overridden via env/settings
+        permission_mode="bypassPermissions",
     )
 
+    prompt = _build_prompt(messages)
     assistant_text = ""
-    async for message in query(prompt=_message_stream(messages), options=options):
-        if hasattr(message, "result"):
-            assistant_text = str(message.result)
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    assistant_text += block.text
+        elif isinstance(message, ResultMessage) and message.result and not assistant_text:
+            assistant_text = message.result
 
     return assistant_text, _last_flights
 
