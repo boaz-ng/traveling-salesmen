@@ -66,6 +66,7 @@ def _parse_flight_offer(offer: dict) -> FlightOption:
         return_segments = [_parse_segment(s) for s in ret.get("segments", [])]
         return_duration = _parse_duration_minutes(ret.get("duration", "PT0M"))
 
+    # Stops count reflects outbound journey only (standard in flight search UIs)
     stops = max(0, len(outbound_segments) - 1)
     total_duration = outbound_duration + return_duration
 
