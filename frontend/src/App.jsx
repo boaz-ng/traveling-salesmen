@@ -290,9 +290,9 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[#F7F5EF]">
+    <div className="flex h-full min-h-0 bg-[#F7F5EF]">
       {/* Left side: header + trip planner */}
-      <div className={`flex-1 flex flex-col overflow-hidden ${chatOpen ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${chatOpen ? 'hidden md:flex' : 'flex'}`}>
         <div className="px-6 pt-4 pb-2 shrink-0">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-lg font-semibold text-[#111111] tracking-tight">
@@ -333,7 +333,7 @@ function App() {
       <div className={`
         ${chatOpen ? 'flex' : 'hidden'}
         w-full md:w-1/2 lg:w-[45%]
-        flex-col bg-white shrink-0
+        flex-col bg-white shrink-0 min-h-0 overflow-hidden
         md:rounded-l-2xl md:shadow-[-8px_0_30px_-12px_rgba(0,0,0,0.12)]
       `}>
         {/* Mobile header */}
@@ -358,20 +358,20 @@ function App() {
             &times;
           </button>
         </div>
-        <ChatWindow
-          sessionId={sessionId}
-          setSessionId={setSessionId}
-          onConversationUpdate={handleConversationUpdate}
-          pendingMessage={pendingMessage}
-          clearPendingMessage={() => setPendingMessage(null)}
-          onSelectFlightFromChat={(flight, index) => setSelectedPlanId(getPlanIdFromFlight(flight, index))}
-          flightListCap={PLAN_LIST_CAP}
-        />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <ChatWindow
+            sessionId={sessionId}
+            setSessionId={setSessionId}
+            onConversationUpdate={handleConversationUpdate}
+            pendingMessage={pendingMessage}
+            clearPendingMessage={() => setPendingMessage(null)}
+          />
+        </div>
       </div>
 
       {/* Bottom bar: inline input with chat icon + submit — visible when chat is closed */}
       {!chatOpen && (
-        <div className="fixed bottom-0 inset-x-0 z-50 px-4 pb-4 pt-2 bg-gradient-to-t from-[#F7F5EF] via-[#F7F5EF] to-transparent">
+        <div className="fixed bottom-0 inset-x-0 z-50 px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-[#F7F5EF] via-[#F7F5EF] to-transparent">
           <form
             onSubmit={handleBarSubmit}
             className="max-w-xl mx-auto flex items-center gap-2 bg-white rounded-full shadow-lg border border-[#D6C6A8]/50 px-2 py-1.5"

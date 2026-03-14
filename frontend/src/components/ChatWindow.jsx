@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendMessage } from '../api'
 import MessageBubble from './MessageBubble'
-import FlightCard from './FlightCard'
 
 function ChatWindow({
   sessionId,
@@ -9,8 +8,6 @@ function ChatWindow({
   onConversationUpdate,
   pendingMessage,
   clearPendingMessage,
-  onSelectFlightFromChat,
-  flightListCap = 10,
 }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -94,18 +91,6 @@ function ChatWindow({
         {messages.map((msg, i) => (
           <div key={i}>
             <MessageBubble role={msg.role} content={msg.content} />
-            {msg.flights && msg.flights.length > 0 && (
-              <div className="mt-2 space-y-2 ml-2">
-                {msg.flights.slice(0, flightListCap).map((flight, j) => (
-                  <FlightCard
-                    key={j}
-                    flight={flight}
-                    rank={j + 1}
-                    onClick={onSelectFlightFromChat ? () => onSelectFlightFromChat(flight, j) : undefined}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         ))}
         {loading && (

@@ -2,7 +2,16 @@ import { useState } from 'react'
 import PlanCard from './PlanCard'
 
 function PlansSection({ plans, selectedPlan, onSelectPlan }) {
-  const [expandedId, setExpandedId] = useState(null)
+  const [expandedIds, setExpandedIds] = useState(new Set())
+
+  const toggleExpanded = (planId) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(planId)) next.delete(planId)
+      else next.add(planId)
+      return next
+    })
+  }
 
   if (!plans || plans.length === 0) {
     return (
@@ -16,15 +25,15 @@ function PlansSection({ plans, selectedPlan, onSelectPlan }) {
 
   return (
     <section className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 md:items-center">
         {plans.map(plan => (
           <PlanCard
             key={plan.id}
             plan={plan}
             selected={selectedPlan?.id === plan.id}
-            expanded={expandedId === plan.id}
+            expanded={expandedIds.has(plan.id)}
             onClick={() => {
-              setExpandedId(prev => (prev === plan.id ? null : plan.id))
+              toggleExpanded(plan.id)
               onSelectPlan?.(plan.id)
             }}
           />
