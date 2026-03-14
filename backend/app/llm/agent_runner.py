@@ -7,11 +7,12 @@ This module wires the Claude Agent SDK to the existing domain logic:
   ``search_flights`` so we reuse all existing SerpApi integration and scoring.
 - ``run_agent_session`` exposes a simple interface compatible with the
   existing orchestrator: it takes a message history and returns
-  ``(assistant_text, flights_or_none)``.
+  ``(assistant_text, flights_or_none, parsed_requirements_or_none)``.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Tuple
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, query, tool
@@ -24,11 +25,14 @@ from app.llm.tools import (
     _RESOLVE_REGION_PARAMS,
     _SEARCH_FLIGHTS_DESCRIPTION,
     _SEARCH_FLIGHTS_PARAMS,
+    _UPDATE_REQUIREMENTS_DESCRIPTION,
+    _UPDATE_REQUIREMENTS_PARAMS,
 )
+from app.schemas.chat import ParsedRequirements
 from app.schemas.flight import FlightOption
 
-# Holds the most recent set of flights returned by the search_flights tool.
 _last_flights: List[FlightOption] | None = None
+_last_requirements: ParsedRequirements | None = None
 
 
 @tool(
@@ -69,10 +73,31 @@ async def tool_search_flights(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@tool(
+    "update_requirements",
+    _UPDATE_REQUIREMENTS_DESCRIPTION,
+    _UPDATE_REQUIREMENTS_PARAMS,
+)
+async def tool_update_requirements(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Capture the agent's current understanding of trip requirements."""
+    global _last_requirements
+    _last_requirements = ParsedRequirements(**{
+        k: v for k, v in args.items() if v is not None
+    })
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps({"status": "requirements_updated"}),
+            }
+        ]
+    }
+
+
 flight_tools_server = create_sdk_mcp_server(
     name="flight-tools",
     version="0.1.0",
-    tools=[tool_resolve_region, tool_search_flights],
+    tools=[tool_resolve_region, tool_search_flights, tool_update_requirements],
 )
 
 
@@ -90,17 +115,18 @@ def _build_prompt(messages: List[Dict[str, Any]]) -> str:
 
 async def run_agent_session(
     messages: List[Dict[str, Any]],
-) -> Tuple[str, List[FlightOption] | None]:
+) -> Tuple[str, List[FlightOption] | None, ParsedRequirements | None]:
     """Run a conversation turn via the Claude Agent SDK.
 
     Args:
         messages: Existing chat history for this session.
 
     Returns:
-        (assistant_text, flight_results_or_none)
+        (assistant_text, flight_results_or_none, parsed_requirements_or_none)
     """
-    global _last_flights
+    global _last_flights, _last_requirements
     _last_flights = None
+    _last_requirements = None
 
     options = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
@@ -118,5 +144,5 @@ async def run_agent_session(
         elif isinstance(message, ResultMessage) and message.result and not assistant_text:
             assistant_text = message.result
 
-    return assistant_text, _last_flights
+    return assistant_text, _last_flights, _last_requirements
 

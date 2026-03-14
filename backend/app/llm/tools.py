@@ -94,6 +94,66 @@ _SEARCH_FLIGHTS_PARAMS = {
     ],
 }
 
+_UPDATE_REQUIREMENTS_DESCRIPTION = (
+    "Report your current structured understanding of the user's trip requirements. "
+    "Call this EVERY turn — even if some fields are still unknown — so the UI can "
+    "display what has been gathered so far."
+)
+
+_UPDATE_REQUIREMENTS_PARAMS = {
+    "type": "object",
+    "properties": {
+        "origin": {
+            "type": "string",
+            "description": "Human-readable origin (e.g., 'New York City', 'Los Angeles').",
+        },
+        "destination": {
+            "type": "string",
+            "description": "Human-readable destination (e.g., 'Tokyo', 'Southeast Asia').",
+        },
+        "origin_airports": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "IATA codes for origin airports, if known (e.g., ['JFK', 'EWR']).",
+        },
+        "destination_airports": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "IATA codes for destination airports, if known.",
+        },
+        "departure_dates": {
+            "type": "string",
+            "description": (
+                "Departure date range as understood so far "
+                "(e.g., 'late June 2025', '2025-06-20 to 2025-06-30')."
+            ),
+        },
+        "return_dates": {
+            "type": "string",
+            "description": "Return date range, or null for one-way.",
+        },
+        "budget": {
+            "type": "string",
+            "description": "Budget constraint as stated by the user (e.g., 'under $400').",
+        },
+        "passengers": {
+            "type": "integer",
+            "description": "Number of passengers.",
+        },
+        "cabin_class": {
+            "type": "string",
+            "enum": ["ECONOMY", "PREMIUM_ECONOMY", "BUSINESS", "FIRST"],
+            "description": "Cabin class.",
+        },
+        "preference": {
+            "type": "string",
+            "enum": ["cost", "comfort", "balanced"],
+            "description": "Scoring preference.",
+        },
+    },
+    "required": [],
+}
+
 # ── Anthropic format (used by Claude) ───────────────────────────────────────
 
 ANTHROPIC_TOOLS = [
@@ -106,6 +166,11 @@ ANTHROPIC_TOOLS = [
         "name": "search_flights",
         "description": _SEARCH_FLIGHTS_DESCRIPTION,
         "input_schema": _SEARCH_FLIGHTS_PARAMS,
+    },
+    {
+        "name": "update_requirements",
+        "description": _UPDATE_REQUIREMENTS_DESCRIPTION,
+        "input_schema": _UPDATE_REQUIREMENTS_PARAMS,
     },
 ]
 
@@ -126,6 +191,14 @@ OPENAI_TOOLS = [
             "name": "search_flights",
             "description": _SEARCH_FLIGHTS_DESCRIPTION,
             "parameters": _SEARCH_FLIGHTS_PARAMS,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_requirements",
+            "description": _UPDATE_REQUIREMENTS_DESCRIPTION,
+            "parameters": _UPDATE_REQUIREMENTS_PARAMS,
         },
     },
 ]
