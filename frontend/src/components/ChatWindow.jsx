@@ -3,7 +3,7 @@ import { sendMessage } from '../api'
 import MessageBubble from './MessageBubble'
 import FlightCard from './FlightCard'
 
-function ChatWindow({ sessionId, setSessionId }) {
+function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -30,14 +30,22 @@ function ChatWindow({ sessionId, setSessionId }) {
     try {
       const data = await sendMessage(sessionId, userMessage)
       setSessionId(data.session_id)
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.response,
-          flights: data.flights,
-        },
-      ])
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: data.response,
+        flights: data.flights,
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
+
+      if (onConversationUpdate) {
+        onConversationUpdate({
+          userMessage,
+          assistantMessage,
+          flights: data.flights ?? [],
+        })
+      }
     } catch (err) {
       setMessages(prev => [
         ...prev,
