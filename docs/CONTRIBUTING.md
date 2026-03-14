@@ -1,4 +1,4 @@
-# Contributing to Traveling Salesmen
+# Contributing to Traveling Salesman
 
 ## Prerequisites
 

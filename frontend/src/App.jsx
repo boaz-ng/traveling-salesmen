@@ -296,7 +296,7 @@ function App() {
         <div className="px-6 pt-4 pb-2 shrink-0">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-lg font-semibold text-[#111111] tracking-tight">
-              Traveling Salesmen
+              Traveling Salesman
             </h1>
             <div className="flex items-center gap-2">
               <button
@@ -349,7 +349,7 @@ function App() {
         </div>
         {/* Desktop header */}
         <div className="hidden md:flex items-center justify-between px-5 py-3">
-          <span className="text-sm font-semibold text-[#111111]">Traveling Salesmen</span>
+          <span className="text-sm font-semibold text-[#111111]">Traveling Salesman</span>
           <button
             type="button"
             onClick={() => setChatOpen(false)}

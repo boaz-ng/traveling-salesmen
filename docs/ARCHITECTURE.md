@@ -2,7 +2,7 @@
 
 ## Overview
 
-Traveling Salesmen uses a **Claude Agent SDK** orchestration layer. The agent drives the conversation — it decides when it has enough information to search, calls tools to resolve regions, search flights via SerpApi, and progressively updates the frontend with its parsed understanding of the user's requirements.
+Traveling Salesman uses a **Claude Agent SDK** orchestration layer. The agent drives the conversation — it decides when it has enough information to search, calls tools to resolve regions, search flights via SerpApi, and progressively updates the frontend with its parsed understanding of the user's requirements.
 
 ## Data Flow
 

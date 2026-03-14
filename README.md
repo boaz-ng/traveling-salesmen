@@ -1,4 +1,4 @@
-# Traveling Salesmen
+# Traveling Salesman
 
 A conversational flight search tool with an interactive trip planner. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions, searches for flights via SerpApi, scores results, and presents the top options on an interactive 2D/3D map.
 
