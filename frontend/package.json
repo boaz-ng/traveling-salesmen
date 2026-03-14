@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "generate:airports": "node scripts/generate-airport-coordinates.cjs"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",

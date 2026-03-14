@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ComposableMap,
   Geographies,
@@ -9,7 +9,8 @@ import {
   Sphere,
   ZoomableGroup,
 } from 'react-simple-maps'
-import { geoEquirectangular } from 'd3-geo'
+import { geoEquirectangular, geoOrthographic } from 'd3-geo'
+import { AIRPORT_COORDINATES } from '../data/airport_coordinates/airportCoordinates'
 
 const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
@@ -19,40 +20,6 @@ const WORLD_WIDTH = _proj([180, 0])[0] - _proj([-180, 0])[0]
 const OFFSETS = [-WORLD_WIDTH, 0, WORLD_WIDTH]
 const MAP_TOP = _proj([0, 90])[1]
 const MAP_BOTTOM = _proj([0, -90])[1]
-
-const AIRPORT_COORDINATES = {
-  JFK: [-73.7781, 40.6413],
-  LGA: [-73.874, 40.7769],
-  EWR: [-74.1745, 40.6895],
-  MIA: [-80.2906, 25.7959],
-  FLL: [-80.1527, 26.0726],
-  TPA: [-82.534, 27.979],
-  SJU: [-66.0018, 18.4394],
-  LAX: [-118.4085, 33.9416],
-  NRT: [140.3929, 35.772],
-  PVG: [121.8083, 31.1443],
-  EZE: [-58.5358, -34.8222],
-  DTW: [-83.3534, 42.2124],
-  ORD: [-87.9073, 41.9742],
-  ATL: [-84.428, 33.6407],
-  DFW: [-97.038, 32.8998],
-  SFO: [-122.375, 37.6213],
-  SEA: [-122.3088, 47.4502],
-  DEN: [-104.6737, 39.8561],
-  IAH: [-95.3414, 29.9844],
-  CLT: [-80.9431, 35.214],
-  PHX: [-112.0116, 33.4373],
-  ICN: [126.4505, 37.4602],
-  HND: [139.7798, 35.5494],
-  GRU: [-46.4731, -23.4356],
-  SCL: [-70.7858, -33.393],
-  LHR: [-0.4614, 51.4700],
-  CDG: [2.5479, 49.0097],
-  DXB: [55.3644, 25.2532],
-  SIN: [103.9894, 1.3502],
-  HKG: [113.9146, 22.3089],
-  BKK: [100.7501, 13.6900],
-}
 
 const BACKGROUND_CITIES = [
   { name: 'Tokyo', coord: [139.6917, 35.6895], tier: 1 },
@@ -106,6 +73,81 @@ const geoStyle = {
   default: { outline: 'none', pointerEvents: 'none' },
   hover: { outline: 'none', pointerEvents: 'none' },
   pressed: { outline: 'none', pointerEvents: 'none' },
+}
+
+const CHAR_W = 0.55
+const DIRECTIONS = [
+  [1, 0], [1, -1], [0, -1], [-1, -1],
+  [-1, 0], [-1, 1], [0, 1], [1, 1],
+]
+
+function overlapArea(a, b) {
+  const ox = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1))
+  const oy = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1))
+  return ox * oy
+}
+
+function computeLabelPlacements(items, projFn) {
+  const placed = []
+  const result = new Map()
+  const sorted = [...items].sort((a, b) => a.priority - b.priority)
+
+  for (const item of sorted) {
+    const p = projFn(item.coord)
+    if (!p || isNaN(p[0]) || isNaN(p[1])) continue
+
+    const w = item.label.length * item.fontSize * CHAR_W
+    const h = item.fontSize * 1.2
+    const baseDist = Math.sqrt(item.xOff * item.xOff + item.yOff * item.yOff)
+
+    const makeBbox = (xo, yo) => {
+      const anchorLeft = xo < 0
+      const tx = anchorLeft ? p[0] + xo - w : p[0] + xo
+      return { x1: tx, y1: p[1] + yo - h / 2, x2: tx + w, y2: p[1] + yo + h / 2 }
+    }
+
+    const totalOverlap = (bbox) => {
+      let sum = 0
+      for (const b of placed) sum += overlapArea(bbox, b)
+      return sum
+    }
+
+    const defaultBbox = makeBbox(item.xOff, item.yOff)
+    if (totalOverlap(defaultBbox) === 0) {
+      result.set(item.key, { xOff: item.xOff, yOff: item.yOff })
+      placed.push(defaultBbox)
+      continue
+    }
+
+    let bestOff = null
+    let bestOverlap = Infinity
+    for (const mult of [1, 1.5, 2, 2.5]) {
+      const d = baseDist * mult
+      for (const [dx, dy] of DIRECTIONS) {
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const xo = (dx / len) * d
+        const yo = (dy / len) * d
+        const bbox = makeBbox(xo, yo)
+        const ov = totalOverlap(bbox)
+        if (ov === 0) {
+          bestOff = { xOff: xo, yOff: yo }
+          bestOverlap = 0
+          break
+        }
+        if (ov < bestOverlap) {
+          bestOverlap = ov
+          bestOff = { xOff: xo, yOff: yo }
+        }
+      }
+      if (bestOverlap === 0) break
+    }
+
+    const final = bestOff || { xOff: item.xOff, yOff: item.yOff }
+    const finalBbox = makeBbox(final.xOff, final.yOff)
+    result.set(item.key, { xOff: final.xOff, yOff: final.yOff })
+    placed.push(finalBbox)
+  }
+  return result
 }
 
 function visibleBackgroundTier(zoom, isGlobe) {
@@ -247,6 +289,68 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
   const filteredBgCities2D = BACKGROUND_CITIES.filter(c => c.tier <= mapTier)
   const filteredBgCitiesGlobe = BACKGROUND_CITIES.filter(c => c.tier <= globeTier)
 
+  const visibleLabels2D = useMemo(() => {
+    const items = []
+    if (originCoord) {
+      items.push({ key: `origin-${effectiveOriginLabel}`, coord: originCoord, label: effectiveOriginLabel, fontSize: 20, xOff: 8, yOff: 4, priority: 0 })
+    }
+    for (const dest of knownDestinations) {
+      items.push({ key: `dest-${dest.code}`, coord: dest.coord, label: dest.code, fontSize: 20, xOff: 6, yOff: 3, priority: 1 })
+    }
+    const layoverCodes = new Set(knownDestinations.map(d => d.code))
+    if (effectiveOriginLabel && /^[A-Z]{3}$/i.test(effectiveOriginLabel)) layoverCodes.add(effectiveOriginLabel.toUpperCase())
+    for (const plan of plans) {
+      const wp = plan.waypoints || []
+      if (wp.length <= 2) continue
+      for (const code of wp.slice(1, -1)) {
+        if (layoverCodes.has(code)) continue
+        layoverCodes.add(code)
+        const coord = AIRPORT_COORDINATES[code]
+        if (coord) items.push({ key: `layover-${code}`, coord, label: code, fontSize: 18, xOff: 5, yOff: 3, priority: 2 })
+      }
+    }
+    for (const city of filteredBgCities2D) {
+      items.push({ key: `bg-${city.name}`, coord: city.coord, label: city.name, fontSize: 16, xOff: 4, yOff: 3, priority: 3 })
+    }
+    return computeLabelPlacements(items, _proj)
+  }, [originCoord, effectiveOriginLabel, knownDestinations, plans, filteredBgCities2D])
+
+  const visibleLabelsGlobe = useMemo(() => {
+    const proj = geoOrthographic()
+      .scale(140 * globeZoom)
+      .translate([200, 200])
+      .rotate([-globeRotation[0], -globeRotation[1], 0])
+    const items = []
+    if (originCoord && isCityVisibleOnGlobe(originCoord)) {
+      items.push({ key: `origin-${effectiveOriginLabel}`, coord: originCoord, label: effectiveOriginLabel, fontSize: 20, xOff: 8, yOff: 4, priority: 0 })
+    }
+    for (const dest of knownDestinations) {
+      if (isCityVisibleOnGlobe(dest.coord)) {
+        items.push({ key: `dest-${dest.code}`, coord: dest.coord, label: dest.code, fontSize: 20, xOff: 6, yOff: 3, priority: 1 })
+      }
+    }
+    const layoverCodesGlobe = new Set(knownDestinations.map(d => d.code))
+    if (effectiveOriginLabel && /^[A-Z]{3}$/i.test(effectiveOriginLabel)) layoverCodesGlobe.add(effectiveOriginLabel.toUpperCase())
+    for (const plan of plans) {
+      const wp = plan.waypoints || []
+      if (wp.length <= 2) continue
+      for (const code of wp.slice(1, -1)) {
+        if (layoverCodesGlobe.has(code)) continue
+        layoverCodesGlobe.add(code)
+        const coord = AIRPORT_COORDINATES[code]
+        if (coord && isCityVisibleOnGlobe(coord)) {
+          items.push({ key: `layover-${code}`, coord, label: code, fontSize: 16, xOff: 5, yOff: 3, priority: 2 })
+        }
+      }
+    }
+    for (const city of filteredBgCitiesGlobe) {
+      if (isCityVisibleOnGlobe(city.coord)) {
+        items.push({ key: `bg-${city.name}`, coord: city.coord, label: city.name, fontSize: 16, xOff: 4, yOff: 3, priority: 3 })
+      }
+    }
+    return computeLabelPlacements(items, (coord) => proj(coord))
+  }, [originCoord, effectiveOriginLabel, knownDestinations, plans, filteredBgCitiesGlobe, globeRotation, globeZoom])
+
   return (
     <section className="rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between mb-2 px-1">
@@ -367,40 +471,52 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                       ))
                     })}
 
-                    {/* Layover markers (intermediate waypoints) */}
-                    {plans.map((plan, pi) => {
-                      const wp = plan.waypoints || []
-                      if (wp.length <= 2) return null
-                      const layovers = wp.slice(1, -1)
-                      return layovers.map((code, li) => {
-                        const coord = AIRPORT_COORDINATES[code]
-                        if (!coord) return null
-                        const isSelected = selectedPlan?.id === plan.id
-                        return (
-                          <Marker key={`layover-${pi}-${li}`} coordinates={coord}>
+                    {/* Layover markers (intermediate waypoints) — dedupe vs origin/dest and across plans */}
+                    {(() => {
+                      const shownCodes = new Set(knownDestinations.map(d => d.code))
+                      if (effectiveOriginLabel && /^[A-Z]{3}$/i.test(effectiveOriginLabel)) shownCodes.add(effectiveOriginLabel.toUpperCase())
+                      requirements?.origin_airports?.forEach(c => shownCodes.add(c))
+                      const z = mapPosition.zoom
+                      const markers = []
+                      plans.forEach((plan, pi) => {
+                        const wp = plan.waypoints || []
+                        if (wp.length <= 2) return
+                        wp.slice(1, -1).forEach((code, li) => {
+                          if (shownCodes.has(code)) return
+                          shownCodes.add(code)
+                          const coord = AIRPORT_COORDINATES[code]
+                          if (!coord) return
+                          const isSelected = selectedPlan?.id === plan.id
+                          const pl = visibleLabels2D.get(`layover-${code}`)
+                          markers.push(
+                            <Marker key={`layover-${code}`} coordinates={coord}>
                             <circle
-                              r={3 / mapPosition.zoom}
+                              r={3 / z}
                               fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
                               stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
-                              strokeWidth={1 / mapPosition.zoom}
+                              strokeWidth={1 / z}
                             />
-                            <text
-                              textAnchor="start"
-                              x={5 / mapPosition.zoom}
-                              y={3 / mapPosition.zoom}
-                              style={{
-                                fontSize: 18 / mapPosition.zoom,
-                                fill: isSelected ? '#9C8A6A' : '#B5A88E',
-                                pointerEvents: 'none',
-                                opacity: isSelected ? 0.9 : 0.5,
-                              }}
-                            >
-                              {code}
-                            </text>
+                            {pl && (
+                              <text
+                                textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                                x={pl.xOff / z}
+                                y={pl.yOff / z}
+                                style={{
+                                  fontSize: 18 / z,
+                                  fill: isSelected ? '#9C8A6A' : '#B5A88E',
+                                  pointerEvents: 'none',
+                                  opacity: isSelected ? 0.9 : 0.5,
+                                }}
+                              >
+                                {code}
+                              </text>
+                            )}
                           </Marker>
-                        )
+                          )
+                        })
                       })
-                    })}
+                      return markers
+                    })()}
 
                     {/* Fallback: if no plans yet, draw simple origin-to-destination lines from requirements */}
                     {!hasPlans && originCoord && knownDestinations.map((dest, i) => (
@@ -415,60 +531,78 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                       />
                     ))}
 
-                    {originCoord && (
-                      <Marker coordinates={originCoord}>
-                        <circle r={5 / mapPosition.zoom} fill="#9C8A6A" />
-                        <text
-                          textAnchor="start"
-                          x={8 / mapPosition.zoom}
-                          y={4 / mapPosition.zoom}
-                          style={{
-                            fontSize: 20 / mapPosition.zoom,
-                            fill: '#111111',
-                            pointerEvents: 'none',
-                          }}
-                        >
-                          {effectiveOriginLabel}
-                        </text>
-                      </Marker>
-                    )}
+                    {originCoord && (() => {
+                      const z = mapPosition.zoom
+                      const pl = visibleLabels2D.get(`origin-${effectiveOriginLabel}`)
+                      return (
+                        <Marker coordinates={originCoord}>
+                          <circle r={5 / z} fill="#9C8A6A" />
+                          {pl && (
+                            <text
+                              textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                              x={pl.xOff / z}
+                              y={pl.yOff / z}
+                              style={{
+                                fontSize: 20 / z,
+                                fill: '#111111',
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              {effectiveOriginLabel}
+                            </text>
+                          )}
+                        </Marker>
+                      )
+                    })()}
 
-                    {knownDestinations.map((dest, index) => (
-                      <Marker key={dest.code || index} coordinates={dest.coord}>
-                        <circle r={4 / mapPosition.zoom} fill="#FFFFFF" stroke="#9C8A6A" strokeWidth={1.5 / mapPosition.zoom} />
-                        <text
-                          textAnchor="start"
-                          x={6 / mapPosition.zoom}
-                          y={3 / mapPosition.zoom}
-                          style={{
-                            fontSize: 20 / mapPosition.zoom,
-                            fill: '#9C8A6A',
-                            pointerEvents: 'none',
-                          }}
-                        >
-                          {dest.code}
-                        </text>
-                      </Marker>
-                    ))}
+                    {knownDestinations.map((dest, index) => {
+                      const z = mapPosition.zoom
+                      const pl = visibleLabels2D.get(`dest-${dest.code}`)
+                      return (
+                        <Marker key={dest.code || index} coordinates={dest.coord}>
+                          <circle r={4 / z} fill="#FFFFFF" stroke="#9C8A6A" strokeWidth={1.5 / z} />
+                          {pl && (
+                            <text
+                              textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                              x={pl.xOff / z}
+                              y={pl.yOff / z}
+                              style={{
+                                fontSize: 20 / z,
+                                fill: '#9C8A6A',
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              {dest.code}
+                            </text>
+                          )}
+                        </Marker>
+                      )
+                    })}
 
-                    {filteredBgCities2D.map(city => (
-                      <Marker key={city.name} coordinates={city.coord}>
-                        <circle r={1.5 / mapPosition.zoom} fill="#C4B8A0" opacity={0.5} />
-                        <text
-                          textAnchor="start"
-                          x={4 / mapPosition.zoom}
-                          y={3 / mapPosition.zoom}
-                          style={{
-                            fontSize: 16 / mapPosition.zoom,
-                            fill: '#B5A88E',
-                            pointerEvents: 'none',
-                            opacity: 0.6,
-                          }}
-                        >
-                          {city.name}
-                        </text>
-                      </Marker>
-                    ))}
+                    {filteredBgCities2D.map(city => {
+                      const z = mapPosition.zoom
+                      const pl = visibleLabels2D.get(`bg-${city.name}`)
+                      return (
+                        <Marker key={city.name} coordinates={city.coord}>
+                          <circle r={2.5 / z} fill="#C4B8A0" opacity={0.6} />
+                          {pl && (
+                            <text
+                              textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                              x={pl.xOff / z}
+                              y={pl.yOff / z}
+                              style={{
+                                fontSize: 16 / z,
+                                fill: '#B5A88E',
+                                pointerEvents: 'none',
+                                opacity: 0.6,
+                              }}
+                            >
+                              {city.name}
+                            </text>
+                          )}
+                        </Marker>
+                      )
+                    })}
                   </g>
                 ))}
               </ZoomableGroup>
@@ -532,40 +666,51 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                 ))
               })}
 
-              {/* Layover markers on globe */}
-              {plans.map((plan, pi) => {
-                const wp = plan.waypoints || []
-                if (wp.length <= 2) return null
-                const layovers = wp.slice(1, -1)
-                return layovers.map((code, li) => {
-                  const coord = AIRPORT_COORDINATES[code]
-                  if (!coord || !isCityVisibleOnGlobe(coord)) return null
-                  const isSelected = selectedPlan?.id === plan.id
-                  return (
-                    <Marker key={`globe-layover-${pi}-${li}`} coordinates={coord}>
-                      <circle
-                        r={3}
-                        fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
-                        stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
-                        strokeWidth={1}
-                      />
-                      <text
-                        textAnchor="start"
-                        x={5}
-                        y={3}
-                        style={{
-                          fontSize: 16,
-                          fill: isSelected ? '#9C8A6A' : '#B5A88E',
-                          pointerEvents: 'none',
-                          opacity: isSelected ? 0.9 : 0.5,
-                        }}
-                      >
-                        {code}
-                      </text>
-                    </Marker>
-                  )
+              {/* Layover markers on globe — dedupe vs origin/dest and across plans */}
+              {(() => {
+                const shownCodes = new Set(knownDestinations.map(d => d.code))
+                if (effectiveOriginLabel && /^[A-Z]{3}$/i.test(effectiveOriginLabel)) shownCodes.add(effectiveOriginLabel.toUpperCase())
+                requirements?.origin_airports?.forEach(c => shownCodes.add(c))
+                const markers = []
+                plans.forEach((plan, pi) => {
+                  const wp = plan.waypoints || []
+                  if (wp.length <= 2) return
+                  wp.slice(1, -1).forEach((code) => {
+                    if (shownCodes.has(code)) return
+                    shownCodes.add(code)
+                    const coord = AIRPORT_COORDINATES[code]
+                    if (!coord || !isCityVisibleOnGlobe(coord)) return
+                    const isSelected = selectedPlan?.id === plan.id
+                    const pl = visibleLabelsGlobe.get(`layover-${code}`)
+                    markers.push(
+                      <Marker key={`globe-layover-${code}`} coordinates={coord}>
+                        <circle
+                          r={3}
+                          fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
+                          stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
+                          strokeWidth={1}
+                        />
+                        {pl && (
+                          <text
+                            textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                            x={pl.xOff}
+                            y={pl.yOff}
+                            style={{
+                              fontSize: 16,
+                              fill: isSelected ? '#9C8A6A' : '#B5A88E',
+                              pointerEvents: 'none',
+                              opacity: isSelected ? 0.9 : 0.5,
+                            }}
+                          >
+                            {code}
+                          </text>
+                        )}
+                      </Marker>
+                    )
+                  })
                 })
-              })}
+                return markers
+              })()}
 
               {/* Fallback lines from requirements when no plans yet */}
               {!hasPlans && originCoord && knownDestinations.map((dest, i) => (
@@ -580,55 +725,66 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                 />
               ))}
 
-              {originCoord && isCityVisibleOnGlobe(originCoord) && (
-                <Marker coordinates={originCoord}>
-                  <circle r={5} fill="#9C8A6A" />
-                  <text
-                    textAnchor="start"
-                    x={8}
-                    y={4}
-                    style={{ fontSize: 20, fill: '#111111', pointerEvents: 'none' }}
-                  >
-                    {effectiveOriginLabel}
-                  </text>
-                </Marker>
-              )}
+              {originCoord && isCityVisibleOnGlobe(originCoord) && (() => {
+                const pl = visibleLabelsGlobe.get(`origin-${effectiveOriginLabel}`)
+                return (
+                  <Marker coordinates={originCoord}>
+                    <circle r={5} fill="#9C8A6A" />
+                    {pl && (
+                      <text
+                        textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                        x={pl.xOff}
+                        y={pl.yOff}
+                        style={{ fontSize: 20, fill: '#111111', pointerEvents: 'none' }}
+                      >
+                        {effectiveOriginLabel}
+                      </text>
+                    )}
+                  </Marker>
+                )
+              })()}
 
               {knownDestinations.map((dest, index) => {
                 if (!isCityVisibleOnGlobe(dest.coord)) return null
+                const pl = visibleLabelsGlobe.get(`dest-${dest.code}`)
                 return (
                   <Marker key={dest.code || index} coordinates={dest.coord}>
                     <circle r={4} fill="#FFFFFF" stroke="#9C8A6A" strokeWidth={1.5} />
-                    <text
-                      textAnchor="start"
-                      x={6}
-                      y={3}
-                      style={{ fontSize: 20, fill: '#9C8A6A', pointerEvents: 'none' }}
-                    >
-                      {dest.code}
-                    </text>
+                    {pl && (
+                      <text
+                        textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                        x={pl.xOff}
+                        y={pl.yOff}
+                        style={{ fontSize: 20, fill: '#9C8A6A', pointerEvents: 'none' }}
+                      >
+                        {dest.code}
+                      </text>
+                    )}
                   </Marker>
                 )
               })}
 
               {filteredBgCitiesGlobe.map(city => {
                 if (!isCityVisibleOnGlobe(city.coord)) return null
+                const pl = visibleLabelsGlobe.get(`bg-${city.name}`)
                 return (
                   <Marker key={city.name} coordinates={city.coord}>
-                    <circle r={1.5} fill="#C4B8A0" opacity={0.5} />
-                    <text
-                      textAnchor="start"
-                      x={4}
-                      y={3}
-                      style={{
-                        fontSize: 16,
-                        fill: '#B5A88E',
-                        pointerEvents: 'none',
-                        opacity: 0.6,
-                      }}
-                    >
-                      {city.name}
-                    </text>
+                    <circle r={2.5} fill="#C4B8A0" opacity={0.6} />
+                    {pl && (
+                      <text
+                        textAnchor={pl.xOff < 0 ? 'end' : 'start'}
+                        x={pl.xOff}
+                        y={pl.yOff}
+                        style={{
+                          fontSize: 16,
+                          fill: '#B5A88E',
+                          pointerEvents: 'none',
+                          opacity: 0.6,
+                        }}
+                      >
+                        {city.name}
+                      </text>
+                    )}
                   </Marker>
                 )
               })}
