@@ -1,0 +1,127 @@
+"""Claude Agent SDK runner for the flight search assistant.
+
+This module wires the Claude Agent SDK to the existing domain logic:
+
+- The agent uses the same SYSTEM_PROMPT behavior description.
+- Custom tools delegate to ``handle_tool_call`` for ``resolve_region`` and
+  ``search_flights`` so we reuse all existing Amadeus integration and scoring.
+- ``run_agent_session`` exposes a simple interface compatible with the
+  existing orchestrator: it takes a message history and returns
+  ``(assistant_text, flights_or_none)``.
+"""
+
+from __future__ import annotations
+
+from typing import Any, AsyncGenerator, Dict, Iterable, List, Tuple
+
+from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, query, tool
+
+from app.llm.prompts import SYSTEM_PROMPT
+from app.llm.provider import handle_tool_call
+from app.llm.tools import (
+    _RESOLVE_REGION_DESCRIPTION,
+    _RESOLVE_REGION_PARAMS,
+    _SEARCH_FLIGHTS_DESCRIPTION,
+    _SEARCH_FLIGHTS_PARAMS,
+)
+from app.schemas.flight import FlightOption
+
+# Holds the most recent set of flights returned by the search_flights tool.
+_last_flights: List[FlightOption] | None = None
+
+
+@tool(
+    "resolve_region",
+    _RESOLVE_REGION_DESCRIPTION,
+    _RESOLVE_REGION_PARAMS,
+)
+async def tool_resolve_region(args: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP tool that delegates to the existing resolve_region tool handler."""
+    result_json, _ = handle_tool_call("resolve_region", args)
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": result_json,
+            }
+        ]
+    }
+
+
+@tool(
+    "search_flights",
+    _SEARCH_FLIGHTS_DESCRIPTION,
+    _SEARCH_FLIGHTS_PARAMS,
+)
+async def tool_search_flights(args: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP tool that delegates to the existing search_flights tool handler."""
+    global _last_flights
+    result_json, flights = handle_tool_call("search_flights", args)
+    _last_flights = flights
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": result_json,
+            }
+        ]
+    }
+
+
+flight_tools_server = create_sdk_mcp_server(
+    name="flight-tools",
+    version="0.1.0",
+    tools=[tool_resolve_region, tool_search_flights],
+)
+
+
+def _format_message_history(messages: Iterable[Dict[str, Any]]) -> str:
+    """Render a simple text transcript from the existing message history."""
+    lines: list[str] = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if not isinstance(content, str):
+            continue
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+async def _message_stream(messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
+    """Async generator used as the Agent SDK prompt stream.
+
+    Custom tools are only available in streaming-input mode, so we provide the
+    full conversation transcript as a single chunk.
+    """
+    transcript = _format_message_history(messages)
+    if transcript:
+        yield transcript
+
+
+async def run_agent_session(
+    messages: List[Dict[str, Any]],
+) -> Tuple[str, List[FlightOption] | None]:
+    """Run a conversation turn via the Claude Agent SDK.
+
+    Args:
+        messages: Existing chat history for this session.
+
+    Returns:
+        (assistant_text, flight_results_or_none)
+    """
+    global _last_flights
+    _last_flights = None
+
+    options = ClaudeAgentOptions(
+        system_prompt=SYSTEM_PROMPT,
+        mcp_servers={"flight-tools": flight_tools_server},
+        # Let the SDK manage the model/version; can be overridden via env/settings
+    )
+
+    assistant_text = ""
+    async for message in query(prompt=_message_stream(messages), options=options):
+        if hasattr(message, "result"):
+            assistant_text = str(message.result)
+
+    return assistant_text, _last_flights
+

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.llm.orchestrator import run_conversation
+from app.llm.agent_runner import run_agent_session
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.session import get_or_create_session
 
@@ -16,7 +16,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     messages.append({"role": "user", "content": request.message})
 
-    response_text, flights = run_conversation(messages)
+    response_text, flights = await run_agent_session(messages)
 
     return ChatResponse(
         session_id=session_id,
