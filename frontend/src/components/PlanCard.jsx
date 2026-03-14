@@ -18,12 +18,17 @@ function PlanCard({ plan, expanded, selected, onClick }) {
     airline,
     origin,
     destination,
+    waypoints,
     stops,
     durationMinutes,
     departureTime,
     arrivalTime,
     tagline,
   } = plan
+
+  const routeLabel = waypoints && waypoints.length > 1
+    ? waypoints.join(' → ')
+    : `${origin || 'Origin'} → ${destination || 'Destination'}`
 
   const hours = durationMinutes != null ? Math.floor(durationMinutes / 60) : null
   const minutes = durationMinutes != null ? durationMinutes % 60 : null
@@ -45,8 +50,8 @@ function PlanCard({ plan, expanded, selected, onClick }) {
 
   return (
     <article
-      className={`flex flex-col bg-[#FFFFFF] rounded-2xl shadow-sm overflow-hidden border ${
-        selected ? 'border-[#9C8A6A]' : 'border-[#E5E0D2]'
+      className={`flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden border transition-all ${
+        selected ? 'border-[#9C8A6A] shadow-md' : 'border-[#D6C6A8]/30 shadow-sm hover:shadow-md'
       }`}
     >
       <button
@@ -60,7 +65,7 @@ function PlanCard({ plan, expanded, selected, onClick }) {
             <div>
               <p className="text-sm font-semibold text-[#111111]">{airline}</p>
               <p className="text-xs text-[#777777]">
-                {origin || 'Origin'} &nbsp;→&nbsp; {destination || 'Destination'}
+                {routeLabel}
               </p>
               {tagline && (
                 <p className="mt-1 text-xs text-[#9C8A6A]">
@@ -120,7 +125,7 @@ function PlanCard({ plan, expanded, selected, onClick }) {
       {expanded && (
         <div className="border-t border-[#E5E0D2] px-4 pb-4 pt-3 space-y-3 text-xs bg-[#FDFBF6]">
           <div className="grid grid-cols-2 gap-3">
-            <DetailRow label="Route" value={origin && destination ? `${origin} → ${destination}` : undefined} />
+            <DetailRow label="Route" value={routeLabel} />
             <DetailRow label="Duration" value={durationLabel} />
             <DetailRow label="Stops" value={stopsLabel} />
             {price != null && <DetailRow label="Estimated price" value={`$${Number(price).toFixed(0)}`} />}

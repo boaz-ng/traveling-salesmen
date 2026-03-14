@@ -3,11 +3,12 @@ import { sendMessage } from '../api'
 import MessageBubble from './MessageBubble'
 import FlightCard from './FlightCard'
 
-function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
+function ChatWindow({ sessionId, setSessionId, onConversationUpdate, pendingMessage, clearPendingMessage }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef(null)
+  const sentPendingRef = useRef(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -17,12 +18,10 @@ function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
     scrollToBottom()
   }, [messages])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!input.trim() || loading) return
-
-    const userMessage = input.trim()
-    setInput('')
+  const doSend = async (text) => {
+    if (!text) return
+    const userMessage = text.trim()
+    if (!userMessage) return
 
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setLoading(true)
@@ -47,7 +46,7 @@ function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
           parsedIntent: data.parsed_intent ?? null,
         })
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
@@ -57,13 +56,29 @@ function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
     }
   }
 
+  useEffect(() => {
+    if (pendingMessage && pendingMessage !== sentPendingRef.current) {
+      sentPendingRef.current = pendingMessage
+      clearPendingMessage()
+      doSend(pendingMessage)
+    }
+  }, [pendingMessage])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!input.trim() || loading) return
+    const text = input.trim()
+    setInput('')
+    doSend(text)
+  }
+
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto">
+    <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="text-center text-gray-400 mt-20">
-            <p className="text-lg">👋 Hi! Tell me about your trip.</p>
-            <p className="text-sm mt-2">
+          <div className="text-center text-[#9C8A6A]/60 mt-16">
+            <p className="text-lg font-medium text-[#111111]">Tell me about your trip.</p>
+            <p className="text-sm mt-2 text-[#777777]">
               Try: &quot;Fly from NYC to somewhere warm in late June, under $400&quot;
             </p>
           </div>
@@ -81,29 +96,31 @@ function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
           </div>
         ))}
         {loading && (
-          <div className="flex items-center space-x-2 text-gray-400 ml-2">
+          <div className="flex items-center space-x-2 text-[#9C8A6A] ml-2">
             <div className="animate-pulse">Searching flights...</div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
-        <div className="flex space-x-3">
+      <form onSubmit={handleSubmit} className="bg-white px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 bg-[#F7F5EF] rounded-full px-3 py-1.5">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Where do you want to fly?"
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 bg-transparent text-sm text-[#111111] placeholder-[#B0A795] px-1 py-1.5 focus:outline-none"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-[#9C8A6A] text-white hover:bg-[#8A7A5E] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            Send
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </button>
         </div>
       </form>

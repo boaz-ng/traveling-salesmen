@@ -96,6 +96,7 @@ function App() {
   const [requirements, setRequirements] = useState(EMPTY_REQUIREMENTS)
   const [latestFlights, setLatestFlights] = useState([])
   const [selectedPlanId, setSelectedPlanId] = useState(null)
+  const [chatOpen, setChatOpen] = useState(true)
 
   const loadDemoTrip = () => {
     const demoFlights = [
@@ -266,63 +267,136 @@ function App() {
     [requirements, plans],
   )
 
+  const [barInput, setBarInput] = useState('')
+  const [pendingMessage, setPendingMessage] = useState(null)
+
+  const handleBarSubmit = (e) => {
+    e.preventDefault()
+    if (!barInput.trim()) return
+    setPendingMessage(barInput.trim())
+    setBarInput('')
+    setChatOpen(true)
+  }
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F5EF]">
-      <header className="bg-[#F7F5EF] border-b border-[#D6C6A8]/60 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold text-[#111111]">
-                ✈️ Traveling Salesmen
-              </h1>
-              <p className="text-sm text-[#777777]">
-                Tell me about your ideal trip and we&apos;ll map the best routes.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center rounded-full border border-[#D6C6A8] bg-[#FFFFFF] px-3 py-1 text-xs font-medium text-[#9C8A6A]">
-                Trip planner preview
-              </span>
-              <button
-                type="button"
-                onClick={loadDemoTrip}
-                className="inline-flex items-center rounded-full bg-[#9C8A6A] px-3 py-1 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-shadow"
-              >
-                Load sample trip
-              </button>
-              <button
-                type="button"
-                onClick={loadGlobalDemo}
-                className="inline-flex items-center rounded-full bg-[#9C8A6A] px-3 py-1 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-shadow"
-              >
-                Load global demo
-              </button>
-            </div>
+    <div className="flex flex-col h-screen bg-[#F7F5EF]">
+      {/* Lightweight header — no hard border */}
+      <div className="px-6 pt-4 pb-2 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-lg font-semibold text-[#111111] tracking-tight">
+            Traveling Salesmen
+          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadDemoTrip}
+              className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
+            >
+              Sample trip
+            </button>
+            <button
+              type="button"
+              onClick={loadGlobalDemo}
+              className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
+            >
+              Global demo
+            </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto w-full px-4 py-4 space-y-6">
-          <section className="bg-white rounded-2xl shadow-sm border border-[#E5E0D2]">
-            <div className="p-4 sm:p-5">
-              <ChatWindow
-                sessionId={sessionId}
-                setSessionId={setSessionId}
-                onConversationUpdate={handleConversationUpdate}
-              />
-            </div>
-          </section>
-
-          <TripPlannerLayout
-            requirements={requirements}
-            regionSummary={regionSummary}
-            plans={plans}
-            selectedPlan={selectedPlan}
-            onSelectPlan={setSelectedPlanId}
-          />
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left side: trip planner */}
+        <div className={`flex-1 overflow-y-auto ${chatOpen ? 'hidden md:block' : 'block'} pb-20 md:pb-4`}>
+          <div className="max-w-5xl mx-auto w-full px-4 py-2 space-y-5">
+            <TripPlannerLayout
+              requirements={requirements}
+              regionSummary={regionSummary}
+              plans={plans}
+              selectedPlan={selectedPlan}
+              onSelectPlan={setSelectedPlanId}
+            />
+          </div>
         </div>
-      </main>
+
+        {/* Right side: chat panel — elevated with rounded edge */}
+        {chatOpen && (
+          <div className="
+            w-full md:w-1/2 lg:w-[45%]
+            flex flex-col bg-white shrink-0
+            md:rounded-l-2xl md:shadow-[-8px_0_30px_-12px_rgba(0,0,0,0.12)]
+            md:ml-1
+          ">
+            {/* Mobile header */}
+            <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={() => setChatOpen(false)}
+                className="text-[#9C8A6A] hover:text-[#111111] transition-colors text-sm font-medium"
+              >
+                &larr; Back
+              </button>
+              <span className="text-sm font-semibold text-[#111111]">Chat</span>
+            </div>
+            {/* Desktop header */}
+            <div className="hidden md:flex items-center justify-between px-5 py-3">
+              <span className="text-sm font-semibold text-[#111111]">Flight Concierge</span>
+              <button
+                type="button"
+                onClick={() => setChatOpen(false)}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-[#F7F5EF] text-[#9C8A6A] hover:bg-[#E5E0D2] transition-colors text-xs"
+              >
+                &times;
+              </button>
+            </div>
+            <ChatWindow
+              sessionId={sessionId}
+              setSessionId={setSessionId}
+              onConversationUpdate={handleConversationUpdate}
+              pendingMessage={pendingMessage}
+              clearPendingMessage={() => setPendingMessage(null)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Bottom bar: inline input with chat icon + submit — visible when chat is closed */}
+      {!chatOpen && (
+        <div className="fixed bottom-0 inset-x-0 z-50 px-4 pb-4 pt-2 bg-gradient-to-t from-[#F7F5EF] via-[#F7F5EF] to-transparent">
+          <form
+            onSubmit={handleBarSubmit}
+            className="max-w-xl mx-auto flex items-center gap-2 bg-white rounded-full shadow-lg border border-[#D6C6A8]/50 px-2 py-1.5"
+          >
+            <button
+              type="button"
+              onClick={() => setChatOpen(true)}
+              className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#9C8A6A] text-white hover:bg-[#8A7A5E] transition-colors"
+              aria-label="Open chat"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
+            <input
+              type="text"
+              value={barInput}
+              onChange={(e) => setBarInput(e.target.value)}
+              placeholder="Ask about flights..."
+              className="flex-1 bg-transparent text-sm text-[#111111] placeholder-[#B0A795] px-2 py-1.5 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!barInput.trim()}
+              className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#9C8A6A] text-white hover:bg-[#8A7A5E] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label="Send"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

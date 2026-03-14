@@ -246,14 +246,9 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
   const filteredBgCitiesGlobe = BACKGROUND_CITIES.filter(c => c.tier <= globeTier)
 
   return (
-    <section className="bg-[#FFFFFF] border border-[#D6C6A8] rounded-2xl shadow-sm p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[#111111]">Destination region</h2>
-          <p className="text-xs text-[#777777]">
-            We sketch an abstract world view based on the best plans.
-          </p>
-        </div>
+    <section className="rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <div />
         {hasMapData && (
           <div className="inline-flex items-center rounded-full bg-[#F7F5EF] p-1 text-[11px] text-[#777777]">
             <button
@@ -329,7 +324,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                             geography={geo}
                             fill="#E1D6C0"
                             stroke="#D6C6A8"
-                            strokeWidth={0.5}
+                            strokeWidth={0.5 / mapPosition.zoom}
                             style={geoStyle}
                           />
                         ))}
@@ -348,14 +343,15 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                         .filter(w => w.coord)
                       if (wp.length < 2) return null
                       const isSelected = selectedPlan?.id === plan.id
+                      const z = mapPosition.zoom
                       return wp.slice(0, -1).map((from, si) => (
                         <Line
                           key={`route-${pi}-${si}`}
                           from={from.coord}
                           to={wp[si + 1].coord}
                           stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
-                          strokeWidth={isSelected ? 2 : 1}
-                          strokeDasharray={isSelected ? '6 3' : '4 4'}
+                          strokeWidth={(isSelected ? 2 : 1) / z}
+                          strokeDasharray={isSelected ? `${6/z} ${3/z}` : `${4/z} ${4/z}`}
                           strokeOpacity={isSelected ? 1 : 0.5}
                         />
                       ))
@@ -373,17 +369,17 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                         return (
                           <Marker key={`layover-${pi}-${li}`} coordinates={coord}>
                             <circle
-                              r={3}
+                              r={3 / mapPosition.zoom}
                               fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
                               stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
-                              strokeWidth={1}
+                              strokeWidth={1 / mapPosition.zoom}
                             />
                             <text
                               textAnchor="start"
-                              x={5}
-                              y={3}
+                              x={5 / mapPosition.zoom}
+                              y={3 / mapPosition.zoom}
                               style={{
-                                fontSize: Math.max(7, 9 / mapPosition.zoom),
+                                fontSize: 9 / mapPosition.zoom,
                                 fill: isSelected ? '#9C8A6A' : '#B5A88E',
                                 pointerEvents: 'none',
                                 opacity: isSelected ? 0.9 : 0.5,
@@ -403,21 +399,21 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                         from={originCoord}
                         to={dest.coord}
                         stroke="#C4B8A0"
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
+                        strokeWidth={1 / mapPosition.zoom}
+                        strokeDasharray={`${4/mapPosition.zoom} ${4/mapPosition.zoom}`}
                         strokeOpacity={0.5}
                       />
                     ))}
 
                     {originCoord && (
                       <Marker coordinates={originCoord}>
-                        <circle r={5} fill="#9C8A6A" />
+                        <circle r={5 / mapPosition.zoom} fill="#9C8A6A" />
                         <text
                           textAnchor="start"
-                          x={8}
-                          y={4}
+                          x={8 / mapPosition.zoom}
+                          y={4 / mapPosition.zoom}
                           style={{
-                            fontSize: Math.max(8, 10 / mapPosition.zoom),
+                            fontSize: 10 / mapPosition.zoom,
                             fill: '#111111',
                             pointerEvents: 'none',
                           }}
@@ -429,13 +425,13 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
 
                     {knownDestinations.map((dest, index) => (
                       <Marker key={dest.code || index} coordinates={dest.coord}>
-                        <circle r={4} fill="#FFFFFF" stroke="#9C8A6A" strokeWidth={1.5} />
+                        <circle r={4 / mapPosition.zoom} fill="#FFFFFF" stroke="#9C8A6A" strokeWidth={1.5 / mapPosition.zoom} />
                         <text
                           textAnchor="start"
-                          x={6}
-                          y={3}
+                          x={6 / mapPosition.zoom}
+                          y={3 / mapPosition.zoom}
                           style={{
-                            fontSize: Math.max(8, 10 / mapPosition.zoom),
+                            fontSize: 10 / mapPosition.zoom,
                             fill: '#9C8A6A',
                             pointerEvents: 'none',
                           }}
@@ -447,13 +443,13 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
 
                     {filteredBgCities2D.map(city => (
                       <Marker key={city.name} coordinates={city.coord}>
-                        <circle r={1.5} fill="#C4B8A0" opacity={0.5} />
+                        <circle r={1.5 / mapPosition.zoom} fill="#C4B8A0" opacity={0.5} />
                         <text
                           textAnchor="start"
-                          x={4}
-                          y={3}
+                          x={4 / mapPosition.zoom}
+                          y={3 / mapPosition.zoom}
                           style={{
-                            fontSize: Math.max(6, 8 / mapPosition.zoom),
+                            fontSize: 8 / mapPosition.zoom,
                             fill: '#B5A88E',
                             pointerEvents: 'none',
                             opacity: 0.6,

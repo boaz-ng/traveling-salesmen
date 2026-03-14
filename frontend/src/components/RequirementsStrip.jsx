@@ -2,7 +2,7 @@ function Pill({ label, value, placeholder }) {
   const hasValue = value && value.trim().length > 0
 
   return (
-    <div className="flex flex-col min-w-[120px] bg-[#FFFFFF] border border-[#D6C6A8] rounded-full px-4 py-2 shadow-sm">
+    <div className="flex flex-col min-w-[120px] bg-white/70 border border-[#D6C6A8]/40 rounded-full px-4 py-2">
       <span className="text-[11px] font-medium tracking-wide uppercase text-[#777777]">
         {label}
       </span>

@@ -6,28 +6,16 @@ function PlansSection({ plans, selectedPlan, onSelectPlan }) {
 
   if (!plans || plans.length === 0) {
     return (
-      <section className="bg-[#FFFFFF] border border-[#D6C6A8] rounded-2xl shadow-sm p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-[#111111]">Plans</h2>
-        </div>
+      <section className="rounded-2xl p-4 sm:p-5">
         <p className="text-xs text-[#777777]">
-          Once we find good options, your best 4–5 plans will appear here with details and booking
-          hooks.
+          Once we find good options, your best plans will appear here.
         </p>
       </section>
     )
   }
 
   return (
-    <section className="bg-[#FFFFFF] border border-[#D6C6A8] rounded-2xl shadow-sm p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[#111111]">Recommended plans</h2>
-          <p className="text-xs text-[#777777]">
-            Expand a plan to see more details. Booking is coming soon.
-          </p>
-        </div>
-      </div>
+    <section className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         {plans.map(plan => (
           <PlanCard
