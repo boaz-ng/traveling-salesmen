@@ -88,6 +88,50 @@ flowchart LR
 4. **Dict-based region mapping**: Easily extensible without code changes
 5. **Weighted scoring**: User preference (cost/comfort/balanced) adjusts scoring weights
 6. **In-memory sessions**: Simplest possible state for MVP
+7. **Modular team ownership**: Each module has scoped tests, lint, and clear interface contracts
+
+## Module Boundaries (Team Ownership)
+
+The codebase is designed for 4 people to work independently:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Frontend (Person 1)                                    │
+│  frontend/src/                                          │
+│  ─── POST /chat JSON contract ───────────────────┐      │
+└──────────────────────────────────────────────────┼──────┘
+                                                   │
+┌──────────────────────────────────────────────────┼──────┐
+│  API / Integration (Person 4)                    │      │
+│  routers/chat.py, main.py, session.py, config.py │      │
+│  ─── run_conversation() signature ───────────┐   │      │
+└──────────────────────────────────────────────┼───┘──────┘
+                                               │
+┌──────────────────────────────────────────────┼──────────┐
+│  LLM / Orchestration (Person 2)              │          │
+│  llm/orchestrator.py, provider.py, *_provider.py        │
+│  llm/tools.py, llm/prompts.py                          │
+│  ─── handle_tool_call() ─────────────────┐              │
+└──────────────────────────────────────────┼──────────────┘
+                                           │
+┌──────────────────────────────────────────┼──────────────┐
+│  Flight Search / Data (Person 3)         │              │
+│  flights/amadeus_client.py, scoring.py, regions.py      │
+│  schemas/intent.py, flight.py, chat.py                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Interfaces between modules:**
+
+| Seam | Contract | Tested in |
+|------|----------|-----------|
+| Frontend ↔ API | `ChatRequest` / `ChatResponse` JSON shape | `test_chat_api.py` |
+| API ↔ Orchestrator | `run_conversation(messages) → (str, list[FlightOption] \| None)` | `test_contracts.py` |
+| LLM ↔ Flights | `handle_tool_call(name, input) → (json_str, flights)` | `test_contracts.py` |
+| LLM ↔ Schemas | Tool schema params ⊇ FlightSearchIntent fields | `test_contracts.py` |
+| Flights ↔ Schemas | `score_flights()` returns valid `FlightOption` objects | `test_contracts.py` |
+
+Each team member runs `make test-<module>` for fast iteration and `make test-contracts` before merging.
 
 ## Adding a New LLM Provider
 

@@ -1,0 +1,33 @@
+repos:
+  # Python linting & formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Frontend linting
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.17.0
+    hooks:
+      - id: eslint
+        files: ^frontend/src/.*\.(js|jsx)$
+        additional_dependencies:
+          - eslint@9.17.0
+          - globals@15.14.0
+          - eslint-plugin-react-hooks@5.0.0
+          - eslint-plugin-react-refresh@0.4.16
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
