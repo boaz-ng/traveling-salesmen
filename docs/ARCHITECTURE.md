@@ -2,7 +2,7 @@
 
 ## Overview
 
-Flight Concierge uses an **LLM-as-orchestrator** architecture. Claude API with tool use drives the conversation loop — it decides when it has enough information to search and calls tools directly.
+Flight Concierge uses an **LLM-as-orchestrator** architecture with **pluggable LLM providers**. The active provider (Qwen or Anthropic Claude) drives the conversation loop — it decides when it has enough information to search and calls tools directly. The provider is selected via the `LLM_PROVIDER` environment variable.
 
 ## Data Flow
 
@@ -11,9 +11,11 @@ flowchart LR
     User([User]) --> Frontend[React Frontend]
     Frontend -->|POST /chat| FastAPI[FastAPI Backend]
     FastAPI --> Orchestrator[Orchestrator]
-    Orchestrator -->|messages + tools| Claude[Claude API]
-    Claude -->|tool_use: resolve_region| Orchestrator
-    Claude -->|tool_use: search_flights| Orchestrator
+    Orchestrator -->|provider toggle| Provider{LLM Provider}
+    Provider -->|Qwen| Qwen[Qwen API]
+    Provider -->|Anthropic| Claude[Claude API]
+    Provider -->|tool_use: resolve_region| Orchestrator
+    Provider -->|tool_use: search_flights| Orchestrator
     Orchestrator -->|resolve_region| Regions[Region Resolver]
     Orchestrator -->|search_flights| AmadeusClient[Amadeus Client]
     AmadeusClient -->|Flight Offers Search| Amadeus[Amadeus API]
@@ -39,13 +41,27 @@ flowchart LR
 - Delegates to the orchestrator
 
 #### Orchestrator (`llm/orchestrator.py`)
-- Manages the Claude API conversation loop
-- Sends message history + tool definitions to Claude
-- Handles tool calls (resolve_region, search_flights) in a loop
-- Returns final text response + any flight results
+- Provider factory: selects `QwenProvider` or `AnthropicProvider` based on `LLM_PROVIDER` env var
+- Delegates conversation loop to the active provider
+- Provider is cached after first creation
+
+#### LLM Provider Abstraction (`llm/provider.py`)
+- `LLMProvider` abstract base class with `run_conversation()` method
+- Shared `handle_tool_call()` function used by all providers
+- Adding a new provider means implementing one class
+
+#### Provider: Qwen (`llm/qwen_provider.py`)
+- Uses the OpenAI-compatible SDK (`openai` package)
+- Connects to DashScope API (configurable base URL)
+- Default model: `qwen-plus`
+
+#### Provider: Anthropic (`llm/anthropic_provider.py`)
+- Uses the Anthropic SDK (`anthropic` package)
+- Default model: `claude-sonnet-4-20250514`
 
 #### Tool Definitions (`llm/tools.py`)
-- JSON schemas for Claude's tool use format
+- Single source of truth for tool schemas
+- Exports both `ANTHROPIC_TOOLS` (Claude format) and `OPENAI_TOOLS` (OpenAI format)
 - `resolve_region`: resolves vague region names to IATA codes
 - `search_flights`: searches flights with structured parameters
 
@@ -66,8 +82,16 @@ flowchart LR
 
 ## Key Design Decisions
 
-1. **LLM-as-orchestrator**: Claude decides the conversation flow, not hardcoded logic
-2. **FlightSearchIntent as contract**: Clean separation between intent interpretation and flight search
-3. **Dict-based region mapping**: Easily extensible without code changes
-4. **Weighted scoring**: User preference (cost/comfort/balanced) adjusts scoring weights
-5. **In-memory sessions**: Simplest possible state for MVP
+1. **Pluggable LLM providers**: Toggle via `LLM_PROVIDER` env var; easy to add new providers
+2. **LLM-as-orchestrator**: The LLM decides the conversation flow, not hardcoded logic
+3. **FlightSearchIntent as contract**: Clean separation between intent interpretation and flight search
+4. **Dict-based region mapping**: Easily extensible without code changes
+5. **Weighted scoring**: User preference (cost/comfort/balanced) adjusts scoring weights
+6. **In-memory sessions**: Simplest possible state for MVP
+
+## Adding a New LLM Provider
+
+1. Create `backend/app/llm/your_provider.py` implementing `LLMProvider`
+2. Add any new config fields to `backend/app/config.py`
+3. Register it in the factory in `backend/app/llm/orchestrator.py`
+4. If the provider uses a non-standard tool format, add it to `backend/app/llm/tools.py`

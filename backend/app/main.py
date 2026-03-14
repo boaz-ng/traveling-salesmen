@@ -7,7 +7,7 @@ from app.routers.chat import router as chat_router
 
 app = FastAPI(
     title="Flight Concierge",
-    description="Conversational flight search powered by Claude and Amadeus",
+    description="Conversational flight search powered by LLM orchestration and Amadeus",
     version="0.1.0",
 )
 

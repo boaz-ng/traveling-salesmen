@@ -1,6 +1,6 @@
 # ✈️ Flight Concierge
 
-A conversational flight search tool. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions if needed, searches the Amadeus flight API, scores results, and presents the top options. Powered by Claude (LLM-as-orchestrator) with tool use.
+A conversational flight search tool. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions if needed, searches the Amadeus flight API, scores results, and presents the top options. Uses an **LLM-as-orchestrator** architecture with pluggable providers — currently supports **Qwen** (default) and **Anthropic Claude**, toggled via a single env var.
 
 ## Architecture
 
@@ -9,8 +9,9 @@ flowchart LR
     User([User]) --> Frontend[React Frontend]
     Frontend -->|POST /chat| FastAPI[FastAPI Backend]
     FastAPI --> Orchestrator[Orchestrator]
-    Orchestrator -->|messages + tools| Claude[Claude API]
-    Claude -->|tool_use| Orchestrator
+    Orchestrator -->|provider toggle| Provider{LLM Provider}
+    Provider -->|Qwen| Qwen[Qwen API]
+    Provider -->|Anthropic| Claude[Claude API]
     Orchestrator --> Regions[Region Resolver]
     Orchestrator --> AmadeusClient[Amadeus Client]
     AmadeusClient --> Amadeus[Amadeus API]
@@ -25,7 +26,8 @@ flowchart LR
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- API keys: [Anthropic](https://console.anthropic.com/), [Amadeus](https://developers.amadeus.com/) (free test tier)
+- LLM API key: [Qwen/DashScope](https://dashscope.console.aliyun.com/) (default) or [Anthropic](https://console.anthropic.com/)
+- [Amadeus](https://developers.amadeus.com/) API key (free test tier)
 
 ### Setup
 
@@ -74,8 +76,11 @@ make test
 │   │   ├── session.py           # In-memory session store
 │   │   ├── routers/chat.py      # POST /chat endpoint
 │   │   ├── llm/
-│   │   │   ├── orchestrator.py  # Claude conversation loop
-│   │   │   ├── tools.py         # Tool definitions
+│   │   │   ├── orchestrator.py  # Provider factory + delegation
+│   │   │   ├── provider.py      # Abstract LLMProvider base class
+│   │   │   ├── qwen_provider.py # Qwen (OpenAI-compatible) provider
+│   │   │   ├── anthropic_provider.py # Anthropic (Claude) provider
+│   │   │   ├── tools.py         # Tool definitions (both formats)
 │   │   │   └── prompts.py       # System prompt
 │   │   ├── flights/
 │   │   │   ├── amadeus_client.py
@@ -108,8 +113,9 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for setup instructions and guid
 ## Current Status
 
 - ✅ Project scaffold and architecture
-- ✅ Backend: FastAPI + Claude orchestrator + Amadeus integration
+- ✅ Backend: FastAPI + LLM orchestrator + Amadeus integration
+- ✅ Pluggable LLM providers: Qwen (default) and Anthropic Claude
 - ✅ Frontend: React chat interface with flight cards
 - ✅ Scoring engine with cost/comfort/balanced preferences
 - ✅ Region-to-airport resolution
-- ✅ Tests for scoring, regions, and Amadeus client
+- ✅ Tests for scoring, regions, Amadeus client, and provider abstraction
