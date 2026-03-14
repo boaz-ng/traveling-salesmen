@@ -4,7 +4,7 @@
 
 - Python 3.11+
 - Node.js 18+
-- API keys: Qwen/DashScope or Anthropic (see `.env.example`), Amadeus (test tier)
+- API keys: Anthropic and SerpApi (see `.env.example`)
 
 ## Setup
 
@@ -109,8 +109,9 @@ make lint-api          # API module only
 ## Key Files to Know
 
 - `backend/app/schemas/intent.py` — The `FlightSearchIntent` model is the contract between the LLM layer and the flight search layer. See [INTENT_SCHEMA.md](INTENT_SCHEMA.md).
-- `backend/app/llm/provider.py` — Abstract `LLMProvider` base class + shared tool handler
-- `backend/app/llm/orchestrator.py` — Provider factory (toggle via `LLM_PROVIDER` env var)
+- `backend/app/llm/agent_runner.py` — Claude Agent SDK runner with MCP tool definitions
+- `backend/app/llm/provider.py` — Tool handler + LLMProvider base class
+- `backend/app/llm/tools.py` — Tool schemas (descriptions + JSON Schema parameters)
 - `backend/app/flights/regions.py` — Region-to-airport mapping (easy to extend)
 - `backend/app/flights/scoring.py` — Flight scoring weights
 - `backend/tests/test_contracts.py` — Cross-module contract tests

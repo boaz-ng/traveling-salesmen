@@ -338,7 +338,7 @@ function App() {
         </div>
         {/* Desktop header */}
         <div className="hidden md:flex items-center justify-between px-5 py-3">
-          <span className="text-sm font-semibold text-[#111111]">Flight Concierge</span>
+          <span className="text-sm font-semibold text-[#111111]">Traveling Salesmen</span>
           <button
             type="button"
             onClick={() => setChatOpen(false)}

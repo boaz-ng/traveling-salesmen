@@ -2,7 +2,7 @@
 
 ## Overview
 
-Traveling Salesmen uses an **LLM-as-orchestrator** architecture with **pluggable LLM providers**. The active provider (Qwen or Anthropic Claude) drives the conversation loop — it decides when it has enough information to search and calls tools directly. The provider is selected via the `LLM_PROVIDER` environment variable.
+Traveling Salesmen uses a **Claude Agent SDK** orchestration layer. The agent drives the conversation — it decides when it has enough information to search, calls tools to resolve regions, search flights via SerpApi, and progressively updates the frontend with its parsed understanding of the user's requirements.
 
 ## Data Flow
 
@@ -10,18 +10,13 @@ Traveling Salesmen uses an **LLM-as-orchestrator** architecture with **pluggable
 flowchart LR
     User([User]) --> Frontend[React Frontend]
     Frontend -->|POST /chat| FastAPI[FastAPI Backend]
-    FastAPI --> Orchestrator[Orchestrator]
-    Orchestrator -->|provider toggle| Provider{LLM Provider}
-    Provider -->|Qwen| Qwen[Qwen API]
-    Provider -->|Anthropic| Claude[Claude API]
-    Provider -->|tool_use: resolve_region| Orchestrator
-    Provider -->|tool_use: search_flights| Orchestrator
-    Orchestrator -->|resolve_region| Regions[Region Resolver]
-    Orchestrator -->|search_flights| AmadeusClient[Amadeus Client]
-    AmadeusClient -->|Flight Offers Search| Amadeus[Amadeus API]
-    AmadeusClient --> Scoring[Scoring Engine]
-    Scoring -->|scored results| Orchestrator
-    Orchestrator -->|final response + flights| FastAPI
+    FastAPI --> AgentRunner[Claude Agent SDK Runner]
+    AgentRunner -->|tool: resolve_region| Regions[Region Resolver]
+    AgentRunner -->|tool: search_flights| SerpApi[SerpApi Flight Search]
+    AgentRunner -->|tool: update_requirements| ParsedReqs[ParsedRequirements]
+    SerpApi --> Scoring[Scoring Engine]
+    Scoring -->|scored results| AgentRunner
+    AgentRunner -->|response + flights + requirements| FastAPI
     FastAPI -->|JSON response| Frontend
     Frontend --> User
 ```
@@ -29,70 +24,72 @@ flowchart LR
 ## Components
 
 ### Frontend (React + Vite + Tailwind)
-- Simple chat interface with message bubbles
-- Flight cards rendered when search results are returned
-- Connects to backend at `http://localhost:8000`
+
+The frontend is a single-page app with a split-screen layout:
+
+- **App.jsx**: Main layout — manages session state, requirements, flight plans, and the split-screen chat toggle. Derives display models (`plans`, `regionSummary`) from raw flight data.
+- **ChatWindow.jsx**: Scrollable chat panel with message history. Supports external message injection via `pendingMessage` prop (from the bottom input bar). Always mounted to preserve state when hidden.
+- **TripPlannerLayout.jsx**: Orchestrates the three main content sections.
+- **RequirementsStrip.jsx**: Pill-shaped cards showing parsed requirements (origin, destination, dates, budget, preference). Updates progressively as the user converses.
+- **DestinationRegionMap.jsx**: Interactive map with two modes:
+  - **2D map**: Equirectangular projection with triple-copy rendering for seamless horizontal panning. Zoom-scaled labels, markers, and route lines.
+  - **3D globe**: Orthographic projection with drag-to-rotate (sensitivity scales with zoom). Great circle arcs for flight routes.
+- **PlansSection.jsx / PlanCard.jsx**: Ranked flight plans with expandable details, layover visualization, and route labels.
+- **Bottom input bar**: Fixed bar with chat icon + text input + send button, visible when chat panel is collapsed. Submitting opens the chat and sends the message.
+
+Connects to backend via Vite proxy at `/chat` (no direct cross-origin requests).
 
 ### Backend (FastAPI + Python)
 
 #### API Layer (`routers/chat.py`)
 - Single `POST /chat` endpoint
-- Manages session lifecycle
-- Delegates to the orchestrator
+- Manages session lifecycle (in-memory)
+- Delegates to `run_agent_session` from the agent runner
+- Returns `ChatResponse` with `response`, `flights`, and `parsed_intent`
 
-#### Orchestrator (`llm/orchestrator.py`)
-- Provider factory: selects `QwenProvider` or `AnthropicProvider` based on `LLM_PROVIDER` env var
-- Delegates conversation loop to the active provider
-- Provider is cached after first creation
-
-#### LLM Provider Abstraction (`llm/provider.py`)
-- `LLMProvider` abstract base class with `run_conversation()` method
-- Shared `handle_tool_call()` function used by all providers
-- Adding a new provider means implementing one class
-
-#### Provider: Qwen (`llm/qwen_provider.py`)
-- Uses the OpenAI-compatible SDK (`openai` package)
-- Connects to DashScope API (configurable base URL)
-- Default model: `qwen-plus`
-
-#### Provider: Anthropic (`llm/anthropic_provider.py`)
-- Uses the Anthropic SDK (`anthropic` package)
-- Default model: `claude-sonnet-4-20250514`
+#### Agent Runner (`llm/agent_runner.py`)
+- Wires the **Claude Agent SDK** to the domain logic
+- Defines three MCP tools via `@tool` decorators:
+  - `resolve_region`: resolves vague region names to IATA airport codes
+  - `search_flights`: searches flights with structured parameters via SerpApi
+  - `update_requirements`: captures the agent's current understanding of trip details as `ParsedRequirements`
+- Creates an MCP server with all tools registered
+- `run_agent_session()` takes a message history and returns `(assistant_text, flights_or_none, parsed_requirements_or_none)`
 
 #### Tool Definitions (`llm/tools.py`)
-- Single source of truth for tool schemas
-- Exports both `ANTHROPIC_TOOLS` (Claude format) and `OPENAI_TOOLS` (OpenAI format)
-- `resolve_region`: resolves vague region names to IATA codes
-- `search_flights`: searches flights with structured parameters
+- Single source of truth for tool schemas (descriptions + JSON Schema parameters)
+- Exports schema constants used by the agent runner
+
+#### System Prompt (`llm/prompts.py`)
+- Instructs the agent to always call `update_requirements` with its current understanding
+- Guides conversational flow: ask clarifying questions, then search when ready
 
 #### Flight Search (`flights/`)
 - `regions.py`: Dict-based region → airport code resolution
-- `amadeus_client.py`: Amadeus API wrapper using the official SDK
-- `scoring.py`: Weighted scoring/ranking of flight options
+- `amadeus_client.py`: SerpApi flight search wrapper
+- `scoring.py`: Weighted scoring/ranking of flight options (cost/comfort/balanced)
 
 #### Schemas (`schemas/`)
-- `intent.py`: `FlightSearchIntent` — the contract between LLM and search
-- `chat.py`: Request/response models for the chat API
+- `intent.py`: `FlightSearchIntent` — contract between LLM tools and flight search
+- `chat.py`: `ChatRequest`, `ChatResponse`, `ParsedRequirements`
 - `flight.py`: `FlightOption` and `FlightSegment` models
 
 #### Session Management (`session.py`)
 - In-memory dict of session_id → message history
 - UUID generation for new sessions
-- Throwaway — persistence planned for later
 
 ## Key Design Decisions
 
-1. **Pluggable LLM providers**: Toggle via `LLM_PROVIDER` env var; easy to add new providers
-2. **LLM-as-orchestrator**: The LLM decides the conversation flow, not hardcoded logic
-3. **FlightSearchIntent as contract**: Clean separation between intent interpretation and flight search
-4. **Dict-based region mapping**: Easily extensible without code changes
-5. **Weighted scoring**: User preference (cost/comfort/balanced) adjusts scoring weights
-6. **In-memory sessions**: Simplest possible state for MVP
-7. **Modular team ownership**: Each module has scoped tests, lint, and clear interface contracts
+1. **Claude Agent SDK**: Single LLM provider via the agent SDK, replacing the earlier pluggable provider pattern
+2. **LLM-as-orchestrator**: The agent decides the conversation flow, not hardcoded logic
+3. **Progressive requirements**: The `update_requirements` tool lets the agent push structured data to the frontend after every turn
+4. **SerpApi for flights**: Real flight search via Google Flights data through SerpApi
+5. **FlightSearchIntent as contract**: Clean separation between intent interpretation and flight search
+6. **Always-mounted chat**: Chat panel stays in the DOM when hidden, preserving state and in-flight requests
+7. **Zoom-invariant rendering**: 2D map labels, markers, and lines scale inversely with zoom for consistent visual size
+8. **In-memory sessions**: Simplest possible state for MVP
 
 ## Module Boundaries (Team Ownership)
-
-The codebase is designed for 4 people to work independently:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -104,12 +101,12 @@ The codebase is designed for 4 people to work independently:
 ┌──────────────────────────────────────────────────┼──────┐
 │  API / Integration (Person 4)                    │      │
 │  routers/chat.py, main.py, session.py, config.py │      │
-│  ─── run_conversation() signature ───────────┐   │      │
+│  ─── run_agent_session() signature ─────────┐    │      │
 └──────────────────────────────────────────────┼───┘──────┘
                                                │
 ┌──────────────────────────────────────────────┼──────────┐
 │  LLM / Orchestration (Person 2)              │          │
-│  llm/orchestrator.py, provider.py, *_provider.py        │
+│  llm/agent_runner.py, provider.py                       │
 │  llm/tools.py, llm/prompts.py                          │
 │  ─── handle_tool_call() ─────────────────┐              │
 └──────────────────────────────────────────┼──────────────┘
@@ -126,16 +123,16 @@ The codebase is designed for 4 people to work independently:
 | Seam | Contract | Tested in |
 |------|----------|-----------|
 | Frontend ↔ API | `ChatRequest` / `ChatResponse` JSON shape | `test_chat_api.py` |
-| API ↔ Orchestrator | `run_conversation(messages) → (str, list[FlightOption] \| None)` | `test_contracts.py` |
-| LLM ↔ Flights | `handle_tool_call(name, input) → (json_str, flights)` | `test_contracts.py` |
-| LLM ↔ Schemas | Tool schema params ⊇ FlightSearchIntent fields | `test_contracts.py` |
+| API ↔ Agent Runner | `run_agent_session(messages) → (str, list[FlightOption] \| None, ParsedRequirements \| None)` | `test_contracts.py` |
+| Agent ↔ Flights | `handle_tool_call(name, input) → (json_str, flights)` | `test_contracts.py` |
+| Agent ↔ Schemas | Tool schema params ⊇ FlightSearchIntent fields | `test_contracts.py` |
 | Flights ↔ Schemas | `score_flights()` returns valid `FlightOption` objects | `test_contracts.py` |
 
 Each team member runs `make test-<module>` for fast iteration and `make test-contracts` before merging.
 
-## Adding a New LLM Provider
+## Adding a New Tool
 
-1. Create `backend/app/llm/your_provider.py` implementing `LLMProvider`
-2. Add any new config fields to `backend/app/config.py`
-3. Register it in the factory in `backend/app/llm/orchestrator.py`
-4. If the provider uses a non-standard tool format, add it to `backend/app/llm/tools.py`
+1. Define the tool description and JSON Schema parameters in `backend/app/llm/tools.py`
+2. Create an `@tool`-decorated async function in `backend/app/llm/agent_runner.py`
+3. Register the tool in the `flight_tools_server` tools list
+4. If the tool produces data for the frontend, add a field to `ChatResponse` in `schemas/chat.py`

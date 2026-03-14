@@ -1,6 +1,8 @@
-# ✈️ Traveling Salesman
+# Traveling Salesmen
 
-A conversational flight search tool. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions if needed, searches the Amadeus flight API, scores results, and presents the top options. Uses an **LLM-as-orchestrator** architecture with pluggable providers — currently supports **Qwen** (default) and **Anthropic Claude**, toggled via a single env var.
+A conversational flight search tool with an interactive trip planner. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions, searches for flights via SerpApi, scores results, and presents the top options on an interactive 2D/3D map.
+
+Uses a **Claude Agent SDK** orchestration layer — the LLM decides the conversation flow, calls tools to resolve regions, search flights, and progressively update the UI with parsed requirements.
 
 ## Architecture
 
@@ -8,17 +10,15 @@ A conversational flight search tool. Tell it something like *"fly from NYC to so
 flowchart LR
     User([User]) --> Frontend[React Frontend]
     Frontend -->|POST /chat| FastAPI[FastAPI Backend]
-    FastAPI --> Orchestrator[Orchestrator]
-    Orchestrator -->|provider toggle| Provider{LLM Provider}
-    Provider -->|Qwen| Qwen[Qwen API]
-    Provider -->|Anthropic| Claude[Claude API]
-    Orchestrator --> Regions[Region Resolver]
-    Orchestrator --> AmadeusClient[Amadeus Client]
-    AmadeusClient --> Amadeus[Amadeus API]
-    AmadeusClient --> Scoring[Scoring Engine]
-    Scoring --> Orchestrator
-    Orchestrator --> FastAPI
-    FastAPI --> Frontend
+    FastAPI --> AgentRunner[Claude Agent SDK Runner]
+    AgentRunner -->|tool: resolve_region| Regions[Region Resolver]
+    AgentRunner -->|tool: search_flights| SerpApi[SerpApi Flight Search]
+    AgentRunner -->|tool: update_requirements| ParsedReqs[ParsedRequirements]
+    SerpApi --> Scoring[Scoring Engine]
+    Scoring --> AgentRunner
+    AgentRunner -->|response + flights + requirements| FastAPI
+    FastAPI -->|JSON| Frontend
+    Frontend -->|trip planner + map + plans| User
 ```
 
 ## Quick Start
@@ -26,8 +26,8 @@ flowchart LR
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- LLM API key: [Qwen/DashScope](https://dashscope.console.aliyun.com/) (default) or [Anthropic](https://console.anthropic.com/)
-- [Amadeus](https://developers.amadeus.com/) API key (free test tier)
+- [Anthropic](https://console.anthropic.com/) API key
+- [SerpApi](https://serpapi.com/) API key (free tier available)
 
 ### Setup
 
@@ -71,40 +71,53 @@ make test
 ├── backend/
 │   ├── pyproject.toml
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry point
-│   │   ├── config.py            # Environment config
-│   │   ├── session.py           # In-memory session store
-│   │   ├── routers/chat.py      # POST /chat endpoint
+│   │   ├── main.py                # FastAPI entry point
+│   │   ├── config.py              # Environment config (pydantic-settings)
+│   │   ├── session.py             # In-memory session store
+│   │   ├── routers/chat.py        # POST /chat endpoint
 │   │   ├── llm/
-│   │   │   ├── orchestrator.py  # Provider factory + delegation
-│   │   │   ├── provider.py      # Abstract LLMProvider base class
-│   │   │   ├── qwen_provider.py # Qwen (OpenAI-compatible) provider
-│   │   │   ├── anthropic_provider.py # Anthropic (Claude) provider
-│   │   │   ├── tools.py         # Tool definitions (both formats)
-│   │   │   └── prompts.py       # System prompt
+│   │   │   ├── agent_runner.py    # Claude Agent SDK runner
+│   │   │   ├── orchestrator.py    # Legacy provider factory
+│   │   │   ├── provider.py        # Tool handler + LLMProvider base
+│   │   │   ├── tools.py           # Tool definitions (schemas)
+│   │   │   └── prompts.py         # System prompt
 │   │   ├── flights/
-│   │   │   ├── amadeus_client.py
-│   │   │   ├── scoring.py
-│   │   │   └── regions.py
+│   │   │   ├── amadeus_client.py  # SerpApi flight search
+│   │   │   ├── scoring.py         # Weighted scoring engine
+│   │   │   └── regions.py         # Region → airport resolution
 │   │   └── schemas/
-│   │       ├── intent.py        # FlightSearchIntent (team contract)
-│   │       ├── chat.py
-│   │       └── flight.py
+│   │       ├── intent.py          # FlightSearchIntent (contract)
+│   │       ├── chat.py            # ChatRequest, ChatResponse, ParsedRequirements
+│   │       └── flight.py          # FlightOption, FlightSegment
 │   └── tests/
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── api.js
+│   │   ├── App.jsx                # Main app: layout, state, split-screen chat
+│   │   ├── api.js                 # Backend API client
 │   │   └── components/
-│   │       ├── ChatWindow.jsx
-│   │       ├── MessageBubble.jsx
-│   │       └── FlightCard.jsx
+│   │       ├── ChatWindow.jsx     # Chat panel with message history
+│   │       ├── MessageBubble.jsx  # Individual message rendering
+│   │       ├── FlightCard.jsx     # Flight result card in chat
+│   │       ├── TripPlannerLayout.jsx  # Trip planner orchestrator
+│   │       ├── RequirementsStrip.jsx  # Requirement pills (origin, dates, etc.)
+│   │       ├── DestinationRegionMap.jsx  # 2D map + 3D globe
+│   │       ├── PlansSection.jsx   # Plan cards container
+│   │       └── PlanCard.jsx       # Individual plan with expandable details
 │   └── vite.config.js
 └── docs/
     ├── ARCHITECTURE.md
     ├── CONTRIBUTING.md
     └── INTENT_SCHEMA.md
 ```
+
+## Frontend Features
+
+- **Split-screen chat**: toggleable chat panel (right half on desktop, full screen on mobile)
+- **Bottom input bar**: quick message input when chat is collapsed, with chat icon to expand
+- **Requirements strip**: pills showing parsed trip details (origin, destination, dates, budget)
+- **Interactive map**: 2D flat map (equirectangular) with infinite horizontal scrolling, or 3D globe with drag-to-rotate
+- **Flight plans**: ranked plan cards with expandable details, layover visualization, and route highlighting on map
+- **Progressive updates**: requirements and map update in real-time as the conversation progresses
 
 ## Contributing
 
@@ -113,9 +126,12 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for setup instructions and guid
 ## Current Status
 
 - ✅ Project scaffold and architecture
-- ✅ Backend: FastAPI + LLM orchestrator + Amadeus integration
-- ✅ Pluggable LLM providers: Qwen (default) and Anthropic Claude
-- ✅ Frontend: React chat interface with flight cards
+- ✅ Backend: FastAPI + Claude Agent SDK + SerpApi integration
+- ✅ Progressive requirements parsing (update_requirements tool)
+- ✅ Frontend: split-screen chat + trip planner with interactive maps
+- ✅ 2D equirectangular map with seamless horizontal panning
+- ✅ 3D globe with drag-to-rotate and zoom-scaled sensitivity
+- ✅ Multi-segment flight routes with layover visualization
 - ✅ Scoring engine with cost/comfort/balanced preferences
 - ✅ Region-to-airport resolution
-- ✅ Tests for scoring, regions, Amadeus client, and provider abstraction
+- ✅ Tests for scoring, regions, client, and provider abstraction
