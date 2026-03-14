@@ -28,10 +28,21 @@ function mergeRequirements(prev, incoming) {
   return merged
 }
 
+const PLAN_LIST_CAP = 10
+
+function getPlanIdFromFlight(flight, index) {
+  const segments = flight?.outbound_segments || []
+  const firstSeg = segments[0]
+  const lastSeg = segments[segments.length - 1]
+  const origin = firstSeg?.departure_airport || 'origin'
+  const destination = lastSeg?.arrival_airport || 'dest'
+  return `${origin}-${destination}-${index}`
+}
+
 function derivePlans(latestFlights) {
   if (!Array.isArray(latestFlights)) return []
 
-  return latestFlights.slice(0, 5).map((flight, index) => {
+  return latestFlights.slice(0, PLAN_LIST_CAP).map((flight, index) => {
     const segments = flight.outbound_segments || []
     const firstSeg = segments[0]
     const lastSeg = segments[segments.length - 1]
@@ -51,7 +62,7 @@ function derivePlans(latestFlights) {
     }
 
     return {
-      id: `${origin || 'origin'}-${destination || 'dest'}-${index}`,
+      id: getPlanIdFromFlight(flight, index),
       rank: index + 1,
       price: flight.price,
       score: flight.score,
@@ -353,6 +364,8 @@ function App() {
           onConversationUpdate={handleConversationUpdate}
           pendingMessage={pendingMessage}
           clearPendingMessage={() => setPendingMessage(null)}
+          onSelectFlightFromChat={(flight, index) => setSelectedPlanId(getPlanIdFromFlight(flight, index))}
+          flightListCap={PLAN_LIST_CAP}
         />
       </div>
 

@@ -1,4 +1,4 @@
-function FlightCard({ flight, rank }) {
+function FlightCard({ flight, rank, onClick }) {
   const formatDuration = (minutes) => {
     const h = Math.floor(minutes / 60)
     const m = minutes % 60
@@ -14,8 +14,14 @@ function FlightCard({ flight, rank }) {
 
   const outbound = flight.outbound_segments?.[0]
 
+  const baseClass = 'bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow'
+  const Wrapper = onClick ? 'button' : 'div'
+  const wrapperProps = onClick
+    ? { type: 'button', onClick, className: `${baseClass} w-full text-left cursor-pointer` }
+    : { className: baseClass }
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+    <Wrapper {...wrapperProps}>
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <span className="text-lg font-bold text-gray-400">#{rank}</span>
@@ -61,7 +67,7 @@ function FlightCard({ flight, rank }) {
           {outbound.departure_time} → {outbound.arrival_time}
         </div>
       )}
-    </div>
+    </Wrapper>
   )
 }
 
