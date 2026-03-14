@@ -22,6 +22,7 @@ function TripPlannerLayout({ requirements, regionSummary, plans, selectedPlan, o
           hasPlans={hasPlans}
           plans={plans}
           selectedPlan={selectedPlan}
+          requirements={requirements}
         />
         <PlansSection
           plans={plans}

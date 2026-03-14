@@ -2,7 +2,7 @@
 
 ## Overview
 
-Flight Concierge uses an **LLM-as-orchestrator** architecture with **pluggable LLM providers**. The active provider (Qwen or Anthropic Claude) drives the conversation loop — it decides when it has enough information to search and calls tools directly. The provider is selected via the `LLM_PROVIDER` environment variable.
+Traveling Salesmen uses an **LLM-as-orchestrator** architecture with **pluggable LLM providers**. The active provider (Qwen or Anthropic Claude) drives the conversation loop — it decides when it has enough information to search and calls tools directly. The provider is selected via the `LLM_PROVIDER` environment variable.
 
 ## Data Flow
 

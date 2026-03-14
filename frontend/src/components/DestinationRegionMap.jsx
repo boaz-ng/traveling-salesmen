@@ -30,6 +30,26 @@ const AIRPORT_COORDINATES = {
   NRT: [140.3929, 35.772],
   PVG: [121.8083, 31.1443],
   EZE: [-58.5358, -34.8222],
+  DTW: [-83.3534, 42.2124],
+  ORD: [-87.9073, 41.9742],
+  ATL: [-84.428, 33.6407],
+  DFW: [-97.038, 32.8998],
+  SFO: [-122.375, 37.6213],
+  SEA: [-122.3088, 47.4502],
+  DEN: [-104.6737, 39.8561],
+  IAH: [-95.3414, 29.9844],
+  CLT: [-80.9431, 35.214],
+  PHX: [-112.0116, 33.4373],
+  ICN: [126.4505, 37.4602],
+  HND: [139.7798, 35.5494],
+  GRU: [-46.4731, -23.4356],
+  SCL: [-70.7858, -33.393],
+  LHR: [-0.4614, 51.4700],
+  CDG: [2.5479, 49.0097],
+  DXB: [55.3644, 25.2532],
+  SIN: [103.9894, 1.3502],
+  HKG: [113.9146, 22.3089],
+  BKK: [100.7501, 13.6900],
 }
 
 const BACKGROUND_CITIES = [
@@ -97,7 +117,7 @@ function visibleBackgroundTier(zoom, isGlobe) {
   return 1
 }
 
-function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) {
+function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, requirements }) {
   const [mode, setMode] = useState('map')
   const [mapPosition, setMapPosition] = useState({ coordinates: [0, 20], zoom: 1 })
   const [mapUserMoved, setMapUserMoved] = useState(false)
@@ -111,28 +131,42 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
   const originLabel = regionSummary?.originLabel || 'Origin'
   const cityNodes = Array.isArray(regionSummary?.cityNodes) ? regionSummary.cityNodes : []
 
-  const originCoord = resolveAirportCoord(originLabel)
+  // Derive origin from plan-based data first, then fall back to requirements airports
+  const originCoordFromPlans = resolveAirportCoord(originLabel)
+  const originCoordFromReqs = requirements?.origin_airports?.[0]
+    ? AIRPORT_COORDINATES[requirements.origin_airports[0]]
+    : null
+  const originCoord = originCoordFromPlans || originCoordFromReqs
 
-  const knownDestinations = cityNodes
+  const effectiveOriginLabel = originCoordFromPlans
+    ? originLabel
+    : (requirements?.origin || requirements?.origin_airports?.[0] || 'Origin')
+
+  // Derive destinations from plan-based data first, then fall back to requirements airports
+  const knownDestFromPlans = cityNodes
     .map(code => ({ code, coord: AIRPORT_COORDINATES[code] }))
     .filter(d => d.coord)
+
+  const knownDestFromReqs = (requirements?.destination_airports || [])
+    .map(code => ({ code, coord: AIRPORT_COORDINATES[code] }))
+    .filter(d => d.coord)
+
+  const knownDestinations = knownDestFromPlans.length > 0 ? knownDestFromPlans : knownDestFromReqs
 
   const destinationCoords = knownDestinations.map(d => d.coord)
   const destinationCoordsKey = destinationCoords.map(c => c.join(',')).join('|')
 
-  const selectedOriginCoord =
-    selectedPlan?.origin ? AIRPORT_COORDINATES[selectedPlan.origin] : null
-  const selectedDestinationCoord =
-    selectedPlan?.destination ? AIRPORT_COORDINATES[selectedPlan.destination] : null
-  const hasSelectedPath = !!(selectedOriginCoord && selectedDestinationCoord)
+  const hasMapData = hasPlans || originCoord || knownDestinations.length > 0
 
   // Auto-fit 2D map around all airports
   useEffect(() => {
-    if (!hasPlans || !originCoord || destinationCoords.length === 0 || mode !== 'map') return
+    if ((!originCoord && destinationCoords.length === 0) || mode !== 'map') return
     if (mapUserMoved) return
 
-    const lons = [originCoord[0], ...destinationCoords.map(c => c[0])]
-    const lats = [originCoord[1], ...destinationCoords.map(c => c[1])]
+    const allCoords = [...(originCoord ? [originCoord] : []), ...destinationCoords]
+    if (allCoords.length === 0) return
+    const lons = allCoords.map(c => c[0])
+    const lats = allCoords.map(c => c[1])
     const lonMin = Math.min(...lons)
     const lonMax = Math.max(...lons)
     const latMin = Math.min(...lats)
@@ -198,7 +232,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
     if (!el) return
     el.addEventListener('wheel', handleGlobeWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleGlobeWheel)
-  }, [handleGlobeWheel, mode, hasPlans])
+  }, [handleGlobeWheel, mode, hasMapData])
 
   const isCityVisibleOnGlobe = (coord) => {
     if (!coord) return false
@@ -220,7 +254,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
             We sketch an abstract world view based on the best plans.
           </p>
         </div>
-        {hasPlans && (
+        {hasMapData && (
           <div className="inline-flex items-center rounded-full bg-[#F7F5EF] p-1 text-[11px] text-[#777777]">
             <button
               type="button"
@@ -249,7 +283,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
       </div>
 
       <div className="relative h-[24rem] sm:h-[30rem] rounded-2xl bg-[#F7F5EF] overflow-hidden flex items-center justify-center">
-        {!hasPlans && (
+        {!hasMapData && (
           <div className="text-center px-6">
             <p className="text-sm font-medium text-[#111111]">
               Describe your trip to see regions and routes here.
@@ -262,7 +296,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
         )}
 
         {/* ==================== 2D MAP ==================== */}
-        {hasPlans && mode === 'map' && (
+        {hasMapData && mode === 'map' && (
           <div className="w-full h-full">
             <ComposableMap
               projection="geoEqualEarth"
@@ -307,15 +341,73 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
                 {/* Markers, lines, and background cities at each offset */}
                 {OFFSETS.map(offset => (
                   <g key={`overlay-${offset}`} transform={`translate(${offset}, 0)`}>
-                    {hasSelectedPath && (
+                    {/* Route lines: segment-by-segment through waypoints */}
+                    {plans.map((plan, pi) => {
+                      const wp = (plan.waypoints || [])
+                        .map(code => ({ code, coord: AIRPORT_COORDINATES[code] }))
+                        .filter(w => w.coord)
+                      if (wp.length < 2) return null
+                      const isSelected = selectedPlan?.id === plan.id
+                      return wp.slice(0, -1).map((from, si) => (
+                        <Line
+                          key={`route-${pi}-${si}`}
+                          from={from.coord}
+                          to={wp[si + 1].coord}
+                          stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
+                          strokeWidth={isSelected ? 2 : 1}
+                          strokeDasharray={isSelected ? '6 3' : '4 4'}
+                          strokeOpacity={isSelected ? 1 : 0.5}
+                        />
+                      ))
+                    })}
+
+                    {/* Layover markers (intermediate waypoints) */}
+                    {plans.map((plan, pi) => {
+                      const wp = plan.waypoints || []
+                      if (wp.length <= 2) return null
+                      const layovers = wp.slice(1, -1)
+                      return layovers.map((code, li) => {
+                        const coord = AIRPORT_COORDINATES[code]
+                        if (!coord) return null
+                        const isSelected = selectedPlan?.id === plan.id
+                        return (
+                          <Marker key={`layover-${pi}-${li}`} coordinates={coord}>
+                            <circle
+                              r={3}
+                              fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
+                              stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
+                              strokeWidth={1}
+                            />
+                            <text
+                              textAnchor="start"
+                              x={5}
+                              y={3}
+                              style={{
+                                fontSize: Math.max(7, 9 / mapPosition.zoom),
+                                fill: isSelected ? '#9C8A6A' : '#B5A88E',
+                                pointerEvents: 'none',
+                                opacity: isSelected ? 0.9 : 0.5,
+                              }}
+                            >
+                              {code}
+                            </text>
+                          </Marker>
+                        )
+                      })
+                    })}
+
+                    {/* Fallback: if no plans yet, draw simple origin-to-destination lines from requirements */}
+                    {!hasPlans && originCoord && knownDestinations.map((dest, i) => (
                       <Line
-                        from={selectedOriginCoord}
-                        to={selectedDestinationCoord}
-                        stroke="#9C8A6A"
-                        strokeWidth={1.5}
+                        key={`req-line-${dest.code || i}`}
+                        from={originCoord}
+                        to={dest.coord}
+                        stroke="#C4B8A0"
+                        strokeWidth={1}
                         strokeDasharray="4 4"
+                        strokeOpacity={0.5}
                       />
-                    )}
+                    ))}
 
                     {originCoord && (
                       <Marker coordinates={originCoord}>
@@ -330,7 +422,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
                             pointerEvents: 'none',
                           }}
                         >
-                          {originLabel}
+                          {effectiveOriginLabel}
                         </text>
                       </Marker>
                     )}
@@ -379,7 +471,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
         )}
 
         {/* ==================== 3D GLOBE ==================== */}
-        {hasPlans && mode === 'globe' && (
+        {hasMapData && mode === 'globe' && (
           <div
             ref={globeContainerRef}
             className="w-full h-full cursor-grab active:cursor-grabbing"
@@ -414,15 +506,73 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
                 }
               </Geographies>
 
-              {hasSelectedPath && (
+              {/* Route lines: segment-by-segment through waypoints */}
+              {plans.map((plan, pi) => {
+                const wp = (plan.waypoints || [])
+                  .map(code => ({ code, coord: AIRPORT_COORDINATES[code] }))
+                  .filter(w => w.coord)
+                if (wp.length < 2) return null
+                const isSelected = selectedPlan?.id === plan.id
+                return wp.slice(0, -1).map((from, si) => (
+                  <Line
+                    key={`globe-route-${pi}-${si}`}
+                    from={from.coord}
+                    to={wp[si + 1].coord}
+                    stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
+                    strokeWidth={isSelected ? 2 : 1}
+                    strokeDasharray={isSelected ? '6 3' : '4 4'}
+                    strokeOpacity={isSelected ? 1 : 0.5}
+                  />
+                ))
+              })}
+
+              {/* Layover markers on globe */}
+              {plans.map((plan, pi) => {
+                const wp = plan.waypoints || []
+                if (wp.length <= 2) return null
+                const layovers = wp.slice(1, -1)
+                return layovers.map((code, li) => {
+                  const coord = AIRPORT_COORDINATES[code]
+                  if (!coord || !isCityVisibleOnGlobe(coord)) return null
+                  const isSelected = selectedPlan?.id === plan.id
+                  return (
+                    <Marker key={`globe-layover-${pi}-${li}`} coordinates={coord}>
+                      <circle
+                        r={3}
+                        fill={isSelected ? '#FFFFFF' : '#F7F5EF'}
+                        stroke={isSelected ? '#9C8A6A' : '#C4B8A0'}
+                        strokeWidth={1}
+                      />
+                      <text
+                        textAnchor="start"
+                        x={5}
+                        y={3}
+                        style={{
+                          fontSize: 8,
+                          fill: isSelected ? '#9C8A6A' : '#B5A88E',
+                          pointerEvents: 'none',
+                          opacity: isSelected ? 0.9 : 0.5,
+                        }}
+                      >
+                        {code}
+                      </text>
+                    </Marker>
+                  )
+                })
+              })}
+
+              {/* Fallback lines from requirements when no plans yet */}
+              {!hasPlans && originCoord && knownDestinations.map((dest, i) => (
                 <Line
-                  from={selectedOriginCoord}
-                  to={selectedDestinationCoord}
-                  stroke="#9C8A6A"
-                  strokeWidth={1.5}
+                  key={`globe-req-line-${dest.code || i}`}
+                  from={originCoord}
+                  to={dest.coord}
+                  stroke="#C4B8A0"
+                  strokeWidth={1}
                   strokeDasharray="4 4"
+                  strokeOpacity={0.5}
                 />
-              )}
+              ))}
 
               {originCoord && isCityVisibleOnGlobe(originCoord) && (
                 <Marker coordinates={originCoord}>
@@ -433,7 +583,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan }) 
                     y={4}
                     style={{ fontSize: 10, fill: '#111111', pointerEvents: 'none' }}
                   >
-                    {originLabel}
+                    {effectiveOriginLabel}
                   </text>
                 </Marker>
               )}

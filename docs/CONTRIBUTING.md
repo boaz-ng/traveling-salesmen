@@ -1,4 +1,4 @@
-# Contributing to Flight Concierge
+# Contributing to Traveling Salesmen
 
 ## Prerequisites
 

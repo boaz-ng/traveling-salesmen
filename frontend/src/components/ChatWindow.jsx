@@ -44,6 +44,7 @@ function ChatWindow({ sessionId, setSessionId, onConversationUpdate }) {
           userMessage,
           assistantMessage,
           flights: data.flights ?? [],
+          parsedIntent: data.parsed_intent ?? null,
         })
       }
     } catch (err) {

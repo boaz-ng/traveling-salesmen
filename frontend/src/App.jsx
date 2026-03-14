@@ -1,70 +1,45 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import ChatWindow from './components/ChatWindow'
 import TripPlannerLayout from './components/TripPlannerLayout'
 
-function deriveRequirements(latestUserMessage) {
-  if (!latestUserMessage) {
-    return {
-      origin: undefined,
-      destination: undefined,
-      region: undefined,
-      dates: undefined,
-      budget: undefined,
-      preference: undefined,
-    }
-  }
+const EMPTY_REQUIREMENTS = {
+  origin: undefined,
+  destination: undefined,
+  origin_airports: undefined,
+  destination_airports: undefined,
+  dates: undefined,
+  budget: undefined,
+  preference: undefined,
+}
 
-  const text = latestUserMessage
-
-  // Very lightweight budget extraction like "under $400"
-  const budgetMatch = text.match(/under\s+\$?(\d+[\d,]*)/i)
-  const budget = budgetMatch ? `$${budgetMatch[1]}` : undefined
-
-  // From / To extraction like "from NYC" / "from New York City (JFK)"
-  const fromMatch = text.match(/from\s+([A-Za-z\s()]+)/i)
-  const toMatch = text.match(/to\s+([A-Za-z\s()]+)/i)
-
-  const origin =
-    fromMatch?.[1]
-      .replace(/,\s*$/,'')
-      .trim() || undefined
-
-  const destination =
-    toMatch?.[1]
-      .replace(/,\s*$/,'')
-      .trim() || undefined
-
-  // Very loose date phrase capture like "in late June" or "in July"
-  const datesMatch = text.match(/in\s+([A-Za-z]+\s+[0-9]{4}|(early|mid|late)\s+[A-Za-z]+)/i)
-  const dates = datesMatch ? datesMatch[0].trim() : undefined
-
-  // Preference like "preference is balanced" or "balanced between cost and comfort"
-  let preference
-  if (/comfort/i.test(text) && /cost/i.test(text)) {
-    preference = 'balanced'
-  } else if (/cheapest|low cost|budget|price/i.test(text)) {
-    preference = 'cost'
-  } else if (/more comfortable|comfort first|business/i.test(text)) {
-    preference = 'comfort'
-  }
-
-  return {
-    origin,
-    destination,
-    region: undefined,
-    dates,
-    budget,
-    preference,
-  }
+function mergeRequirements(prev, incoming) {
+  if (!incoming) return prev
+  const merged = { ...prev }
+  if (incoming.origin) merged.origin = incoming.origin
+  if (incoming.destination) merged.destination = incoming.destination
+  if (incoming.origin_airports?.length) merged.origin_airports = incoming.origin_airports
+  if (incoming.destination_airports?.length) merged.destination_airports = incoming.destination_airports
+  if (incoming.departure_dates) merged.dates = incoming.departure_dates
+  if (incoming.budget) merged.budget = incoming.budget
+  if (incoming.preference) merged.preference = incoming.preference
+  if (incoming.cabin_class) merged.cabin_class = incoming.cabin_class
+  if (incoming.passengers) merged.passengers = incoming.passengers
+  if (incoming.return_dates) merged.return_dates = incoming.return_dates
+  return merged
 }
 
 function derivePlans(latestFlights) {
   if (!Array.isArray(latestFlights)) return []
 
   return latestFlights.slice(0, 5).map((flight, index) => {
-    const outbound = flight.outbound_segments?.[0]
-    const origin = outbound?.departure_airport
-    const destination = outbound?.arrival_airport
+    const segments = flight.outbound_segments || []
+    const firstSeg = segments[0]
+    const lastSeg = segments[segments.length - 1]
+    const origin = firstSeg?.departure_airport
+    const destination = lastSeg?.arrival_airport
+
+    const waypoints = segments.map(s => s.departure_airport).filter(Boolean)
+    if (lastSeg?.arrival_airport) waypoints.push(lastSeg.arrival_airport)
 
     let tagline = 'Solid option'
     if (index === 0) {
@@ -83,10 +58,11 @@ function derivePlans(latestFlights) {
       airline: flight.airline,
       origin,
       destination,
+      waypoints,
       stops: flight.stops,
       durationMinutes: flight.total_duration_minutes,
-      departureTime: outbound?.departure_time,
-      arrivalTime: outbound?.arrival_time,
+      departureTime: firstSeg?.departure_time,
+      arrivalTime: lastSeg?.arrival_time,
       tagline,
     }
   })
@@ -97,32 +73,31 @@ function deriveRegionSummary(requirements, plans) {
   const originLabel = firstPlan?.origin || requirements.origin || 'Origin'
   const destinationLabel = firstPlan?.destination || requirements.destination || 'Destination'
 
-  const cityNodes = Array.from(
-    new Set(
-      plans
-        .map(p => p.destination)
-        .filter(Boolean),
-    ),
-  )
+  const allAirports = new Set()
+  for (const p of plans) {
+    if (p.waypoints) {
+      for (const code of p.waypoints) {
+        if (code && code !== p.origin) allAirports.add(code)
+      }
+    } else if (p.destination) {
+      allAirports.add(p.destination)
+    }
+  }
 
   return {
     originLabel,
     destinationLabel,
-    cityNodes,
+    cityNodes: Array.from(allAirports),
   }
 }
 
 function App() {
   const [sessionId, setSessionId] = useState(null)
-  const [latestUserMessage, setLatestUserMessage] = useState(null)
-  const [latestAssistantMessage, setLatestAssistantMessage] = useState(null)
+  const [requirements, setRequirements] = useState(EMPTY_REQUIREMENTS)
   const [latestFlights, setLatestFlights] = useState([])
   const [selectedPlanId, setSelectedPlanId] = useState(null)
 
   const loadDemoTrip = () => {
-    const demoUserMessage =
-      'Fly from New York City (JFK) to somewhere warm like Miami or the Caribbean in late June, under $400, balanced between cost and comfort.'
-
     const demoFlights = [
       {
         airline: 'Demo Air',
@@ -186,19 +161,19 @@ function App() {
       },
     ]
 
-    setLatestUserMessage(demoUserMessage)
-    setLatestAssistantMessage({
-      role: 'assistant',
-      content: 'Here are a few warm destinations from NYC in late June that balance cost and comfort.',
-      flights: demoFlights,
+    setRequirements({
+      origin: 'New York City',
+      destination: 'Miami / Caribbean',
+      origin_airports: ['JFK', 'LGA'],
+      destination_airports: ['MIA', 'TPA', 'FLL', 'SJU'],
+      dates: 'late June',
+      budget: 'under $400',
+      preference: 'balanced',
     })
     setLatestFlights(demoFlights)
   }
 
   const loadGlobalDemo = () => {
-    const demoUserMessage =
-      'Fly from Los Angeles (LAX) to Tokyo, Shanghai, or Buenos Aires in mid August, under $900, balanced between cost and comfort.'
-
     const demoFlights = [
       {
         airline: 'Pacific Wings',
@@ -224,9 +199,15 @@ function App() {
         outbound_segments: [
           {
             departure_airport: 'LAX',
-            arrival_airport: 'PVG',
+            arrival_airport: 'ICN',
             departure_time: '01:15',
-            arrival_time: '06:35+1',
+            arrival_time: '05:40+1',
+          },
+          {
+            departure_airport: 'ICN',
+            arrival_airport: 'PVG',
+            departure_time: '07:10+1',
+            arrival_time: '08:35+1',
           },
         ],
       },
@@ -239,33 +220,36 @@ function App() {
         outbound_segments: [
           {
             departure_airport: 'LAX',
-            arrival_airport: 'EZE',
+            arrival_airport: 'DFW',
             departure_time: '22:45',
-            arrival_time: '11:45+1',
+            arrival_time: '04:10+1',
+          },
+          {
+            departure_airport: 'DFW',
+            arrival_airport: 'EZE',
+            departure_time: '06:00+1',
+            arrival_time: '17:45+1',
           },
         ],
       },
     ]
 
-    setLatestUserMessage(demoUserMessage)
-    setLatestAssistantMessage({
-      role: 'assistant',
-      content: 'Here are intercontinental options from LA across the Pacific and to South America.',
-      flights: demoFlights,
+    setRequirements({
+      origin: 'Los Angeles',
+      destination: 'Tokyo / Shanghai / Buenos Aires',
+      origin_airports: ['LAX'],
+      destination_airports: ['NRT', 'PVG', 'EZE'],
+      dates: 'mid August',
+      budget: 'under $900',
+      preference: 'balanced',
     })
     setLatestFlights(demoFlights)
   }
 
-  const handleConversationUpdate = ({ userMessage, assistantMessage, flights }) => {
-    setLatestUserMessage(userMessage)
-    setLatestAssistantMessage(assistantMessage)
+  const handleConversationUpdate = useCallback(({ flights, parsedIntent }) => {
+    setRequirements(prev => mergeRequirements(prev, parsedIntent))
     setLatestFlights(flights ?? [])
-  }
-
-  const requirements = useMemo(
-    () => deriveRequirements(latestUserMessage),
-    [latestUserMessage],
-  )
+  }, [])
 
   const plans = useMemo(
     () => derivePlans(latestFlights),
@@ -289,7 +273,7 @@ function App() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold text-[#111111]">
-                ✈️ Flight Concierge
+                ✈️ Traveling Salesmen
               </h1>
               <p className="text-sm text-[#777777]">
                 Tell me about your ideal trip and we&apos;ll map the best routes.

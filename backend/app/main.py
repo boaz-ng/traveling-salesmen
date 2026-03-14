@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.chat import router as chat_router
 
 app = FastAPI(
-    title="Flight Concierge",
+    title="Traveling Salesmen",
     description="Conversational flight search powered by LLM orchestration and Amadeus",
     version="0.1.0",
 )
