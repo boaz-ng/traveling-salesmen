@@ -36,9 +36,12 @@ def _parse_segment(leg: dict) -> FlightSegment:
     )
 
 
-def _parse_flight_offer(offer: dict) -> FlightOption:
-    """Parse a SerpApi flight offer into a FlightOption."""
-    price = float(offer.get("price", 0))
+def _parse_flight_offer(offer: dict) -> FlightOption | None:
+    """Parse a SerpApi flight offer into a FlightOption. Returns None if price is missing."""
+    raw_price = offer.get("price")
+    if not raw_price:
+        return None
+    price = float(raw_price)
     legs = offer.get("flights", [])
 
     outbound_segments = [_parse_segment(leg) for leg in legs]
@@ -113,7 +116,8 @@ def search_flights(intent: FlightSearchIntent) -> list[FlightOption]:
                 for offer in offers:
                     try:
                         option = _parse_flight_offer(offer)
-                        all_options.append(option)
+                        if option is not None:
+                            all_options.append(option)
                     except (KeyError, ValueError, IndexError) as e:
                         logger.warning("Failed to parse flight offer: %s", e)
 
