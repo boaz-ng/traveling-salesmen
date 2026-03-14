@@ -9,14 +9,16 @@ import {
   Sphere,
   ZoomableGroup,
 } from 'react-simple-maps'
-import { geoEqualEarth } from 'd3-geo'
+import { geoEquirectangular } from 'd3-geo'
 
 const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
 // Compute projected world width so we can tile 3 copies for seamless panning
-const _proj = geoEqualEarth().scale(160).translate([400, 210])
+const _proj = geoEquirectangular().scale(128).translate([400, 210])
 const WORLD_WIDTH = _proj([180, 0])[0] - _proj([-180, 0])[0]
 const OFFSETS = [-WORLD_WIDTH, 0, WORLD_WIDTH]
+const MAP_TOP = _proj([0, 90])[1]
+const MAP_BOTTOM = _proj([0, -90])[1]
 
 const AIRPORT_COORDINATES = {
   JFK: [-73.7781, 40.6413],
@@ -206,13 +208,13 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
       const { startX, startY, startRotation } = globeDragRef.current
       const dx = event.clientX - startX
       const dy = event.clientY - startY
-      const rotateSpeed = 0.6
+      const rotateSpeed = 0.6 / globeZoom
       const rawLon = startRotation[0] - dx * rotateSpeed
       const normalizedLon = ((rawLon + 540) % 360) - 180
       const newLat = Math.max(-80, Math.min(80, startRotation[1] + dy * rotateSpeed))
       setGlobeRotation([normalizedLon, newLat])
     })
-  }, [])
+  }, [globeZoom])
 
   const endGlobeDrag = () => {
     if (globeDragRef.current.dragging) {
@@ -223,7 +225,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
   const handleGlobeWheel = useCallback((event) => {
     event.preventDefault()
     const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1
-    setGlobeZoom(prev => Math.max(0.8, Math.min(6, prev * zoomFactor)))
+    setGlobeZoom(prev => Math.max(0.8, Math.min(20, prev * zoomFactor)))
   }, [])
 
   // Re-attach when mode/hasPlans changes so the ref is populated
@@ -277,7 +279,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
         )}
       </div>
 
-      <div className="relative h-[24rem] sm:h-[30rem] rounded-2xl bg-[#F7F5EF] overflow-hidden flex items-center justify-center">
+      <div className="relative h-[24rem] sm:h-[30rem] rounded-2xl bg-[#F7F5EF] border border-[#D6C6A8]/50 overflow-hidden flex items-center justify-center">
         {!hasMapData && (
           <div className="text-center px-6">
             <p className="text-sm font-medium text-[#111111]">
@@ -294,8 +296,8 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
         {hasMapData && mode === 'map' && (
           <div className="w-full h-full">
             <ComposableMap
-              projection="geoEqualEarth"
-              projectionConfig={{ scale: 160 }}
+              projection="geoEquirectangular"
+              projectionConfig={{ scale: 128 }}
               width={800}
               height={420}
               style={{ width: '100%', height: '100%' }}
@@ -304,15 +306,23 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                 center={mapPosition.coordinates}
                 zoom={mapPosition.zoom}
                 minZoom={0.8}
-                maxZoom={8}
-                translateExtent={[[-1600, -400], [1600, 800]]}
+                maxZoom={40}
+                translateExtent={[[-5000, MAP_TOP], [5000, MAP_BOTTOM]]}
                 onMoveEnd={(pos) => {
                   const [lon, lat] = pos.coordinates
                   const wrappedLon = ((lon + 540) % 360) - 180
-                  setMapPosition({ coordinates: [wrappedLon, lat], zoom: pos.zoom })
+                  const clampedLat = Math.max(-85, Math.min(85, lat))
+                  setMapPosition({ coordinates: [wrappedLon, clampedLat], zoom: pos.zoom })
                   setMapUserMoved(true)
                 }}
               >
+                {/* Graticule at 3 horizontal offsets for seamless wrapping */}
+                {OFFSETS.map(offset => (
+                  <g key={`grat-${offset}`} transform={`translate(${offset}, 0)`}>
+                    <Graticule stroke="#D6C6A8" strokeWidth={0.3 / mapPosition.zoom} strokeOpacity={0.35} />
+                  </g>
+                ))}
+
                 {/* Geographies at 3 horizontal offsets for seamless wrapping */}
                 <Geographies geography={geoUrl}>
                   {({ geographies }) =>
@@ -379,7 +389,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                               x={5 / mapPosition.zoom}
                               y={3 / mapPosition.zoom}
                               style={{
-                                fontSize: 9 / mapPosition.zoom,
+                                fontSize: 18 / mapPosition.zoom,
                                 fill: isSelected ? '#9C8A6A' : '#B5A88E',
                                 pointerEvents: 'none',
                                 opacity: isSelected ? 0.9 : 0.5,
@@ -413,7 +423,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                           x={8 / mapPosition.zoom}
                           y={4 / mapPosition.zoom}
                           style={{
-                            fontSize: 10 / mapPosition.zoom,
+                            fontSize: 20 / mapPosition.zoom,
                             fill: '#111111',
                             pointerEvents: 'none',
                           }}
@@ -431,7 +441,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                           x={6 / mapPosition.zoom}
                           y={3 / mapPosition.zoom}
                           style={{
-                            fontSize: 10 / mapPosition.zoom,
+                            fontSize: 20 / mapPosition.zoom,
                             fill: '#9C8A6A',
                             pointerEvents: 'none',
                           }}
@@ -449,7 +459,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                           x={4 / mapPosition.zoom}
                           y={3 / mapPosition.zoom}
                           style={{
-                            fontSize: 8 / mapPosition.zoom,
+                            fontSize: 16 / mapPosition.zoom,
                             fill: '#B5A88E',
                             pointerEvents: 'none',
                             opacity: 0.6,
@@ -544,7 +554,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                         x={5}
                         y={3}
                         style={{
-                          fontSize: 8,
+                          fontSize: 16,
                           fill: isSelected ? '#9C8A6A' : '#B5A88E',
                           pointerEvents: 'none',
                           opacity: isSelected ? 0.9 : 0.5,
@@ -577,7 +587,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                     textAnchor="start"
                     x={8}
                     y={4}
-                    style={{ fontSize: 10, fill: '#111111', pointerEvents: 'none' }}
+                    style={{ fontSize: 20, fill: '#111111', pointerEvents: 'none' }}
                   >
                     {effectiveOriginLabel}
                   </text>
@@ -593,7 +603,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                       textAnchor="start"
                       x={6}
                       y={3}
-                      style={{ fontSize: 10, fill: '#9C8A6A', pointerEvents: 'none' }}
+                      style={{ fontSize: 20, fill: '#9C8A6A', pointerEvents: 'none' }}
                     >
                       {dest.code}
                     </text>
@@ -611,7 +621,7 @@ function DestinationRegionMap({ regionSummary, hasPlans, plans, selectedPlan, re
                       x={4}
                       y={3}
                       style={{
-                        fontSize: 8,
+                        fontSize: 16,
                         fill: '#B5A88E',
                         pointerEvents: 'none',
                         opacity: 0.6,

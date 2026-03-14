@@ -279,35 +279,33 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#F7F5EF]">
-      {/* Lightweight header — no hard border */}
-      <div className="px-6 pt-4 pb-2 shrink-0">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-[#111111] tracking-tight">
-            Traveling Salesmen
-          </h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={loadDemoTrip}
-              className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
-            >
-              Sample trip
-            </button>
-            <button
-              type="button"
-              onClick={loadGlobalDemo}
-              className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
-            >
-              Global demo
-            </button>
+    <div className="flex h-screen bg-[#F7F5EF]">
+      {/* Left side: header + trip planner */}
+      <div className={`flex-1 flex flex-col overflow-hidden ${chatOpen ? 'hidden md:flex' : 'flex'}`}>
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold text-[#111111] tracking-tight">
+              Traveling Salesmen
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={loadDemoTrip}
+                className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
+              >
+                Sample trip
+              </button>
+              <button
+                type="button"
+                onClick={loadGlobalDemo}
+                className="inline-flex items-center rounded-full bg-[#9C8A6A]/10 text-[#9C8A6A] px-3 py-1 text-xs font-medium hover:bg-[#9C8A6A]/20 transition-colors"
+              >
+                Global demo
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left side: trip planner */}
-        <div className={`flex-1 overflow-y-auto ${chatOpen ? 'hidden md:block' : 'block'} pb-20 md:pb-4`}>
+        <div className={`flex-1 overflow-y-auto ${chatOpen ? 'pb-4' : 'pb-20'}`}>
           <div className="max-w-5xl mx-auto w-full px-4 py-2 space-y-5">
             <TripPlannerLayout
               requirements={requirements}
@@ -318,46 +316,44 @@ function App() {
             />
           </div>
         </div>
+      </div>
 
-        {/* Right side: chat panel — elevated with rounded edge */}
-        {chatOpen && (
-          <div className="
-            w-full md:w-1/2 lg:w-[45%]
-            flex flex-col bg-white shrink-0
-            md:rounded-l-2xl md:shadow-[-8px_0_30px_-12px_rgba(0,0,0,0.12)]
-            md:ml-1
-          ">
-            {/* Mobile header */}
-            <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={() => setChatOpen(false)}
-                className="text-[#9C8A6A] hover:text-[#111111] transition-colors text-sm font-medium"
-              >
-                &larr; Back
-              </button>
-              <span className="text-sm font-semibold text-[#111111]">Chat</span>
-            </div>
-            {/* Desktop header */}
-            <div className="hidden md:flex items-center justify-between px-5 py-3">
-              <span className="text-sm font-semibold text-[#111111]">Flight Concierge</span>
-              <button
-                type="button"
-                onClick={() => setChatOpen(false)}
-                className="w-6 h-6 flex items-center justify-center rounded-full bg-[#F7F5EF] text-[#9C8A6A] hover:bg-[#E5E0D2] transition-colors text-xs"
-              >
-                &times;
-              </button>
-            </div>
-            <ChatWindow
-              sessionId={sessionId}
-              setSessionId={setSessionId}
-              onConversationUpdate={handleConversationUpdate}
-              pendingMessage={pendingMessage}
-              clearPendingMessage={() => setPendingMessage(null)}
-            />
-          </div>
-        )}
+      {/* Right side: chat panel — always mounted, hidden via CSS when closed */}
+      <div className={`
+        ${chatOpen ? 'flex' : 'hidden'}
+        w-full md:w-1/2 lg:w-[45%]
+        flex-col bg-white shrink-0
+        md:rounded-l-2xl md:shadow-[-8px_0_30px_-12px_rgba(0,0,0,0.12)]
+      `}>
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setChatOpen(false)}
+            className="text-[#9C8A6A] hover:text-[#111111] transition-colors text-sm font-medium"
+          >
+            &larr; Back
+          </button>
+          <span className="text-sm font-semibold text-[#111111]">Chat</span>
+        </div>
+        {/* Desktop header */}
+        <div className="hidden md:flex items-center justify-between px-5 py-3">
+          <span className="text-sm font-semibold text-[#111111]">Flight Concierge</span>
+          <button
+            type="button"
+            onClick={() => setChatOpen(false)}
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-[#F7F5EF] text-[#9C8A6A] hover:bg-[#E5E0D2] transition-colors text-xs"
+          >
+            &times;
+          </button>
+        </div>
+        <ChatWindow
+          sessionId={sessionId}
+          setSessionId={setSessionId}
+          onConversationUpdate={handleConversationUpdate}
+          pendingMessage={pendingMessage}
+          clearPendingMessage={() => setPendingMessage(null)}
+        />
       </div>
 
       {/* Bottom bar: inline input with chat icon + submit — visible when chat is closed */}
