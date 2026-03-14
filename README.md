@@ -1,4 +1,4 @@
-# ✈️ Flight Concierge
+# ✈️ Traveling Salesman
 
 A conversational flight search tool. Tell it something like *"fly from NYC to somewhere warm in late June, under $400"* and it interprets your intent, asks clarifying questions if needed, searches the Amadeus flight API, scores results, and presents the top options. Uses an **LLM-as-orchestrator** architecture with pluggable providers — currently supports **Qwen** (default) and **Anthropic Claude**, toggled via a single env var.
 
