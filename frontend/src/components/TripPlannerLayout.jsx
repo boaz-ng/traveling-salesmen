@@ -1,8 +1,22 @@
 import RequirementsStrip from './RequirementsStrip'
 import DestinationRegionMap from './DestinationRegionMap'
 import PlansSection from './PlansSection'
+import TripSection from './TripSection'
 
-function TripPlannerLayout({ requirements, regionSummary, plans, selectedPlan, onSelectPlan }) {
+function TripPlannerLayout({
+  requirements,
+  regionSummary,
+  plans,
+  selectedPlan,
+  onSelectPlan,
+  tripId,
+  tripName,
+  tripFlights,
+  tripSaving,
+  onAddToTrip,
+  onRemoveFromTrip,
+  onRefreshTrip,
+}) {
   const hasPlans = Array.isArray(plans) && plans.length > 0
 
   return (
@@ -19,10 +33,19 @@ function TripPlannerLayout({ requirements, regionSummary, plans, selectedPlan, o
         plans={plans}
         selectedPlan={selectedPlan}
         onSelectPlan={onSelectPlan}
+        onAddToTrip={onAddToTrip}
+        tripSaving={tripSaving}
+        tripFlights={tripFlights}
+      />
+      <TripSection
+        tripId={tripId}
+        tripName={tripName}
+        tripFlights={tripFlights}
+        onRemoveFlight={onRemoveFromTrip}
+        onRefresh={onRefreshTrip}
       />
     </section>
   )
 }
 
 export default TripPlannerLayout
-

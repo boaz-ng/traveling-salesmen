@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ChatWindow from './components/ChatWindow'
 import TripPlannerLayout from './components/TripPlannerLayout'
+import { createTrip, getTrip, addFlightToTrip, removeFlightFromTrip } from './api'
 
 const EMPTY_REQUIREMENTS = {
   origin: undefined,
@@ -102,12 +103,116 @@ function deriveRegionSummary(requirements, plans) {
   }
 }
 
+const TRIP_ID_KEY = 'traveling_salesman_trip_id'
+const DISPLAY_NAME_KEY = 'traveling_salesman_display_name'
+
+function getStoredTripId() {
+  try { return localStorage.getItem(TRIP_ID_KEY) || null } catch { return null }
+}
+function storeTripId(id) {
+  try { localStorage.setItem(TRIP_ID_KEY, id) } catch {}
+}
+function getStoredDisplayName() {
+  try { return localStorage.getItem(DISPLAY_NAME_KEY) || '' } catch { return '' }
+}
+function storeDisplayName(name) {
+  try { localStorage.setItem(DISPLAY_NAME_KEY, name) } catch {}
+}
+
+function getTripIdFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('trip') || null
+  } catch { return null }
+}
+
 function App() {
   const [sessionId, setSessionId] = useState(null)
   const [requirements, setRequirements] = useState(EMPTY_REQUIREMENTS)
   const [latestFlights, setLatestFlights] = useState([])
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [chatOpen, setChatOpen] = useState(true)
+
+  // Trip state
+  const [tripId, setTripId] = useState(() => getTripIdFromUrl() || getStoredTripId())
+  const [tripName, setTripName] = useState('')
+  const [tripFlights, setTripFlights] = useState([])
+  const [tripSaving, setTripSaving] = useState(null)
+  const [displayName, setDisplayName] = useState(() => getStoredDisplayName())
+
+  const fetchTrip = useCallback(async (id) => {
+    if (!id) return
+    try {
+      const data = await getTrip(id)
+      if (data) {
+        setTripName(data.name)
+        setTripFlights(data.flights || [])
+      } else {
+        setTripId(null)
+        setTripFlights([])
+      }
+    } catch { /* trip may not exist yet */ }
+  }, [])
+
+  useEffect(() => {
+    if (tripId) {
+      storeTripId(tripId)
+      fetchTrip(tripId)
+      const url = new URL(window.location)
+      if (url.searchParams.get('trip') !== tripId) {
+        url.searchParams.set('trip', tripId)
+        window.history.replaceState({}, '', url)
+      }
+    }
+  }, [tripId, fetchTrip])
+
+  const promptForName = useCallback(() => {
+    if (displayName) return displayName
+    const name = window.prompt('Enter your display name for the trip:', '') || 'Anonymous'
+    setDisplayName(name)
+    storeDisplayName(name)
+    return name
+  }, [displayName])
+
+  const handleAddToTrip = useCallback(async (plan) => {
+    const isDuplicate = tripFlights.some(f => {
+      const d = f.flight_data || {}
+      return d.airline === plan.airline
+        && d.origin === plan.origin
+        && d.destination === plan.destination
+        && d.price === plan.price
+        && d.durationMinutes === plan.durationMinutes
+    })
+    if (isDuplicate) return
+
+    const name = promptForName()
+    setTripSaving(plan.id)
+    try {
+      let currentTripId = tripId
+      if (!currentTripId) {
+        const trip = await createTrip('My Trip')
+        currentTripId = trip.id
+        setTripId(currentTripId)
+        setTripName(trip.name)
+      }
+      await addFlightToTrip(currentTripId, plan, name)
+      await fetchTrip(currentTripId)
+    } catch (err) {
+      console.error('Failed to add flight to trip:', err)
+    } finally {
+      setTripSaving(null)
+    }
+  }, [tripId, tripFlights, promptForName, fetchTrip])
+
+  const handleRemoveFromTrip = useCallback(async (flightId) => {
+    if (!tripId) return
+    try {
+      await removeFlightFromTrip(tripId, flightId)
+      setTripFlights(prev => prev.filter(f => f.id !== flightId))
+    } catch (err) {
+      console.error('Failed to remove flight from trip:', err)
+    }
+  }, [tripId])
 
   const loadDemoTrip = () => {
     const demoFlights = [
@@ -324,6 +429,13 @@ function App() {
               plans={plans}
               selectedPlan={selectedPlan}
               onSelectPlan={setSelectedPlanId}
+              tripId={tripId}
+              tripName={tripName}
+              tripFlights={tripFlights}
+              tripSaving={tripSaving}
+              onAddToTrip={handleAddToTrip}
+              onRemoveFromTrip={handleRemoveFromTrip}
+              onRefreshTrip={() => fetchTrip(tripId)}
             />
           </div>
         </div>

@@ -3,7 +3,7 @@ import PlanCard from './PlanCard'
 
 const PAGE_SIZE = 2
 
-function PlansSection({ plans, selectedPlan, onSelectPlan }) {
+function PlansSection({ plans, selectedPlan, onSelectPlan, onAddToTrip, tripSaving, tripFlights }) {
   const [expandedIds, setExpandedIds] = useState(new Set())
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const prevPlansRef = useRef(plans)
@@ -73,6 +73,9 @@ function PlansSection({ plans, selectedPlan, onSelectPlan }) {
               toggleExpanded(plan.id)
               onSelectPlan?.(plan.id)
             }}
+            onAddToTrip={onAddToTrip}
+            tripSaving={tripSaving}
+            tripFlights={tripFlights}
           />
         ))}
       </div>
