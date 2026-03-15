@@ -13,12 +13,16 @@ This module wires the Claude Agent SDK to the existing domain logic:
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Tuple
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, query, tool
 from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock
 
+from app.config import settings
 from app.llm.prompts import SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 from app.llm.provider import handle_tool_call
 from app.llm.tools import (
     _RESOLVE_REGION_DESCRIPTION,
@@ -128,21 +132,49 @@ async def run_agent_session(
     _last_flights = None
     _last_requirements = None
 
+    # Pass API key to the Claude Code CLI subprocess (it reads from env)
+    env: Dict[str, str] = {}
+    if settings.anthropic_api_key and settings.anthropic_api_key.strip():
+        env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key.strip()
+
+    stderr_lines: List[str] = []
+
+    def _stderr_callback(line: str) -> None:
+        stderr_lines.append(line)
+        logger.info("Claude CLI stderr: %s", line)
+
     options = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={"flight-tools": flight_tools_server},
         permission_mode="bypassPermissions",
+        env=env,
+        stderr=_stderr_callback,
     )
 
     prompt = _build_prompt(messages)
     assistant_text = ""
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    assistant_text += block.text
-        elif isinstance(message, ResultMessage) and message.result and not assistant_text:
-            assistant_text = message.result
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        assistant_text += block.text
+            elif isinstance(message, ResultMessage) and message.result and not assistant_text:
+                assistant_text = message.result
+    except Exception as e:
+        logger.exception(
+            "Agent session failed: %s%s",
+            str(e),
+            "\nCLI stderr:\n" + "\n".join(stderr_lines) if stderr_lines else "",
+        )
+        # Return a friendly message instead of raising so we respond 200, not 500
+        assistant_text = (
+            "I couldn't complete that request. Please check that:\n"
+            "1. **ANTHROPIC_API_KEY** is set in your `.env` file (at the project root).\n"
+            "2. The Claude Code CLI is installed: `npm install -g @anthropic-ai/claude-code`\n"
+            "3. The `claude` command is on your PATH (`claude -v`).\n\n"
+            "See the server logs for more details."
+        )
 
     return assistant_text, _last_flights, _last_requirements
 
