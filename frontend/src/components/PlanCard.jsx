@@ -16,6 +16,7 @@ function PlanCard({ plan, expanded, selected, onClick }) {
     price,
     score,
     airline,
+    onTimeLikelihood,
     origin,
     destination,
     waypoints,
@@ -90,6 +91,11 @@ function PlanCard({ plan, expanded, selected, onClick }) {
                 Score {Number(score).toFixed(2)}
               </span>
             )}
+            {onTimeLikelihood != null && onTimeLikelihood !== undefined && (
+              <span className="inline-flex items-center rounded-full bg-[#E8F5E9] text-[11px] px-2 py-0.5 text-[#2E7D32] font-medium" title="Based on historical on-time arrival trends">
+                {Math.round(onTimeLikelihood * 100)}% on-time
+              </span>
+            )}
           </div>
         </div>
 
@@ -141,6 +147,9 @@ function PlanCard({ plan, expanded, selected, onClick }) {
             <DetailRow label="Route" value={routeLabel} />
             <DetailRow label="Duration" value={durationLabel} />
             <DetailRow label="Stops" value={stopsLabel} />
+            {onTimeLikelihood != null && onTimeLikelihood !== undefined && (
+              <DetailRow label="On-time likelihood" value={`${Math.round(onTimeLikelihood * 100)}% (historical)`} />
+            )}
             {price != null && <DetailRow label="Estimated price" value={`$${Number(price).toFixed(0)}`} />}
           </div>
 

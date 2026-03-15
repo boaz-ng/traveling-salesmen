@@ -41,6 +41,11 @@ function FlightCard({ flight, rank, onClick }) {
               ? `Score: ${flight.score.toFixed(2)}`
               : 'N/A'}
           </span>
+          {flight.on_time_likelihood != null && flight.on_time_likelihood !== undefined && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700" title="Based on historical on-time arrival trends">
+              {Math.round(flight.on_time_likelihood * 100)}% on-time
+            </span>
+          )}
         </div>
       </div>
 

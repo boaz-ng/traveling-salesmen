@@ -16,11 +16,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     messages.append({"role": "user", "content": request.message})
 
-    response_text, flights, parsed_requirements = await run_agent_session(messages)
+    response_text, flights, hotels, parsed_requirements = await run_agent_session(
+        messages, origin_missing=request.origin_missing
+    )
 
     return ChatResponse(
         session_id=session_id,
         response=response_text,
         flights=flights,
+        hotels=hotels,
         parsed_intent=parsed_requirements,
     )

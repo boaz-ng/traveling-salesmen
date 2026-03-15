@@ -26,3 +26,5 @@ class FlightOption(BaseModel):
     return_segments: list[FlightSegment] | None = None
     score: float | None = None
     airline: str = ""
+    # On-time arrival likelihood 0–1 from historical trends (BTS-style); None if unknown
+    on_time_likelihood: float | None = None

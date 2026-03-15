@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ChatWindow from './components/ChatWindow'
 import TripPlannerLayout from './components/TripPlannerLayout'
 
@@ -29,6 +29,38 @@ function mergeRequirements(prev, incoming) {
 }
 
 const PLAN_LIST_CAP = 10
+
+const NOMINATIM_USER_AGENT = 'TravelingSalesman/1.0 (flight search)'
+const LOCATION_DENIED_KEY = 'traveling_salesman_location_denied'
+
+function getLocationDenied() {
+  try {
+    return localStorage.getItem(LOCATION_DENIED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function setLocationDenied() {
+  try {
+    localStorage.setItem(LOCATION_DENIED_KEY, '1')
+  } catch {}
+}
+
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', 'User-Agent': NOMINATIM_USER_AGENT },
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  const city = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality
+  const state = data.address?.state
+  const country = data.address?.country
+  if (city && country) return state ? `${city}, ${state}` : `${city}, ${country}`
+  if (country) return country
+  return null
+}
 
 function getPlanIdFromFlight(flight, index) {
   const segments = flight?.outbound_segments || []
@@ -67,6 +99,7 @@ function derivePlans(latestFlights) {
       price: flight.price,
       score: flight.score,
       airline: flight.airline,
+      onTimeLikelihood: flight.on_time_likelihood != null ? flight.on_time_likelihood : undefined,
       origin,
       destination,
       waypoints,
@@ -106,8 +139,46 @@ function App() {
   const [sessionId, setSessionId] = useState(null)
   const [requirements, setRequirements] = useState(EMPTY_REQUIREMENTS)
   const [latestFlights, setLatestFlights] = useState([])
+  const [latestHotels, setLatestHotels] = useState([])
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [chatOpen, setChatOpen] = useState(true)
+  const [locationStatus, setLocationStatus] = useState('idle') // 'idle' | 'loading' | 'resolved' | 'denied' | 'unavailable'
+  const [locationDenied, setLocationDeniedState] = useState(() => getLocationDenied())
+
+  const requestLocationAsOrigin = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable')
+      return
+    }
+    setLocationStatus('loading')
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const name = await reverseGeocode(position.coords.latitude, position.coords.longitude)
+          if (name) {
+            setRequirements(prev => mergeRequirements(prev, { origin: name }))
+            setLocationStatus('resolved')
+          } else {
+            setLocationStatus('unavailable')
+          }
+        } catch {
+          setLocationStatus('unavailable')
+        }
+      },
+      () => {
+        setLocationStatus('denied')
+        setLocationDenied()
+        setLocationDeniedState(true)
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    )
+  }, [])
+
+  // Only auto-request location on first visit when we don't have origin and user hasn't previously denied
+  useEffect(() => {
+    if (requirements.origin || locationDenied) return
+    requestLocationAsOrigin()
+  }, [requirements.origin, locationDenied, requestLocationAsOrigin])
 
   const loadDemoTrip = () => {
     const demoFlights = [
@@ -258,9 +329,10 @@ function App() {
     setLatestFlights(demoFlights)
   }
 
-  const handleConversationUpdate = useCallback(({ flights, parsedIntent }) => {
+  const handleConversationUpdate = useCallback(({ flights, hotels, parsedIntent }) => {
     setRequirements(prev => mergeRequirements(prev, parsedIntent))
-    setLatestFlights(flights ?? [])
+    if (flights && flights.length > 0) setLatestFlights(flights)
+    if (hotels && hotels.length > 0) setLatestHotels(hotels)
   }, [])
 
   const plans = useMemo(
@@ -324,6 +396,9 @@ function App() {
               plans={plans}
               selectedPlan={selectedPlan}
               onSelectPlan={setSelectedPlanId}
+              locationStatus={locationStatus}
+              onRequestLocation={requestLocationAsOrigin}
+              hotels={latestHotels}
             />
           </div>
         </div>
@@ -332,7 +407,7 @@ function App() {
       {/* Right side: chat panel — always mounted, hidden via CSS when closed */}
       <div className={`
         ${chatOpen ? 'flex' : 'hidden'}
-        w-full md:w-1/2 lg:w-[45%]
+        w-full md:w-1/2 lg:w-[45%] min-w-0
         flex-col bg-white shrink-0 min-h-0 overflow-hidden
         md:rounded-l-2xl md:shadow-[-8px_0_30px_-12px_rgba(0,0,0,0.12)]
       `}>
@@ -365,6 +440,9 @@ function App() {
             onConversationUpdate={handleConversationUpdate}
             pendingMessage={pendingMessage}
             clearPendingMessage={() => setPendingMessage(null)}
+            originMissing={!requirements.origin}
+            showLocationPrompt={!requirements.origin && !locationDenied}
+            onRequestLocation={requestLocationAsOrigin}
           />
         </div>
       </div>

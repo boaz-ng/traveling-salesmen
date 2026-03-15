@@ -8,6 +8,9 @@ function ChatWindow({
   onConversationUpdate,
   pendingMessage,
   clearPendingMessage,
+  originMissing,
+  showLocationPrompt,
+  onRequestLocation,
 }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -32,7 +35,7 @@ function ChatWindow({
     setLoading(true)
 
     try {
-      const data = await sendMessage(sessionId, userMessage)
+      const data = await sendMessage(sessionId, userMessage, originMissing)
       setSessionId(data.session_id)
 
       const assistantMessage = {
@@ -48,13 +51,17 @@ function ChatWindow({
           userMessage,
           assistantMessage,
           flights: data.flights ?? [],
+          hotels: data.hotels ?? [],
           parsedIntent: data.parsed_intent ?? null,
         })
       }
-    } catch {
+    } catch (err) {
+      const message = err?.message && err.message !== 'Failed to fetch'
+        ? err.message
+        : 'Sorry, something went wrong. Please try again.'
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
+        { role: 'assistant', content: message },
       ])
     } finally {
       setLoading(false)
@@ -78,14 +85,27 @@ function ChatWindow({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px]">
         {messages.length === 0 && (
-          <div className="text-center text-[#9C8A6A]/60 mt-16">
-            <p className="text-lg font-medium text-[#111111]">Tell me about your trip.</p>
-            <p className="text-sm mt-2 text-[#777777]">
-              Try: &quot;Fly from NYC to somewhere warm in late June, under $400&quot;
+          <div className="text-center mt-12 md:mt-16 px-2">
+            <p className="text-xl font-semibold text-[#111111]">
+              {showLocationPrompt ? 'Where are you flying from?' : 'Tell me about your trip.'}
             </p>
+            <p className="text-sm mt-3 text-[#555555] max-w-sm mx-auto">
+              {showLocationPrompt
+                ? 'Share your location or tell me your city (e.g. NYC, San Francisco).'
+                : 'Try: "Fly from NYC to somewhere warm in late June, under $400"'}
+            </p>
+            {showLocationPrompt && onRequestLocation && (
+              <button
+                type="button"
+                onClick={onRequestLocation}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#9C8A6A] text-white text-sm font-medium hover:bg-[#8A7A5E] transition-colors"
+              >
+                Use my location for &quot;From&quot;
+              </button>
+            )}
           </div>
         )}
         {messages.map((msg, i) => (

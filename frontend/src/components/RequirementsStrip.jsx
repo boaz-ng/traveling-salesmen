@@ -1,4 +1,4 @@
-function Pill({ label, value, placeholder }) {
+function Pill({ label, value, placeholder, action }) {
   const hasValue = value && value.trim().length > 0
 
   return (
@@ -6,15 +6,32 @@ function Pill({ label, value, placeholder }) {
       <span className="text-[11px] font-medium tracking-wide uppercase text-[#777777]">
         {label}
       </span>
-      <span className={`text-sm ${hasValue ? 'text-[#111111]' : 'text-[#B0A795]'}`}>
-        {hasValue ? value : placeholder}
-      </span>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`text-sm ${hasValue ? 'text-[#111111]' : 'text-[#B0A795]'}`}>
+          {hasValue ? value : placeholder}
+        </span>
+        {action}
+      </div>
     </div>
   )
 }
 
-function RequirementsStrip({ requirements }) {
+function RequirementsStrip({ requirements, locationStatus, onRequestLocation }) {
   const { origin, destination, region, dates, budget, preference } = requirements || {}
+  const fromPlaceholder =
+    locationStatus === 'loading'
+      ? 'Detecting location…'
+      : 'Add departure'
+  const fromAction =
+    !origin && locationStatus !== 'loading' && onRequestLocation ? (
+      <button
+        type="button"
+        onClick={onRequestLocation}
+        className="text-[11px] text-[#9C8A6A] hover:text-[#8A7A5E] hover:underline"
+      >
+        Use my location
+      </button>
+    ) : null
 
   return (
     <section className="w-full">
@@ -22,27 +39,32 @@ function RequirementsStrip({ requirements }) {
         <Pill
           label="From"
           value={origin}
-          placeholder="Add departure"
+          placeholder={fromPlaceholder}
+          action={fromAction}
         />
         <Pill
           label="To / Region"
           value={destination || region}
           placeholder="Anywhere"
+          action={null}
         />
         <Pill
           label="Dates"
           value={dates}
           placeholder="Flexible"
+          action={null}
         />
         <Pill
           label="Budget"
           value={budget}
           placeholder="Add budget"
+          action={null}
         />
         <Pill
           label="Preference"
           value={preference}
           placeholder="Balanced"
+          action={null}
         />
       </div>
     </section>

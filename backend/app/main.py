@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.routers.chat import router as chat_router
 
@@ -20,6 +21,12 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)
+
+
+@app.get("/")
+async def root() -> RedirectResponse:
+    """Redirect to the frontend dev server so opening the backend URL still works."""
+    return RedirectResponse(url="http://localhost:5173", status_code=302)
 
 
 @app.get("/health")

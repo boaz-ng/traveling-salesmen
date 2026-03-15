@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 
 from app.schemas.flight import FlightOption
+from app.schemas.hotel import HotelOption
 
 
 class ChatRequest(BaseModel):
@@ -10,6 +11,7 @@ class ChatRequest(BaseModel):
 
     session_id: str | None = None
     message: str
+    origin_missing: bool | None = None
 
 
 class ParsedRequirements(BaseModel):
@@ -33,4 +35,5 @@ class ChatResponse(BaseModel):
     session_id: str
     response: str
     flights: list[FlightOption] | None = None
+    hotels: list[HotelOption] | None = None
     parsed_intent: ParsedRequirements | None = None
