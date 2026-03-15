@@ -6,11 +6,12 @@ directly. This module simply delegates there so any remaining imports of
 """
 
 from app.llm.agent_runner import run_agent_session
+from app.schemas.chat import ParsedRequirements
 from app.schemas.flight import FlightOption
 
 
 async def run_conversation(
     messages: list[dict],
-) -> tuple[str, list[FlightOption] | None]:
+) -> tuple[str, list[FlightOption] | None, ParsedRequirements | None]:
     """Backward-compatible wrapper around ``run_agent_session``."""
     return await run_agent_session(messages)

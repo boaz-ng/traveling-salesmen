@@ -1,6 +1,6 @@
 """Tests for the FastAPI chat endpoint and health check."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -25,9 +25,11 @@ class TestChatEndpoint:
     def setup_method(self):
         sessions.clear()
 
-    @patch("app.routers.chat.run_conversation")
+    @patch("app.routers.chat.run_agent_session")
     def test_chat_returns_response(self, mock_run):
-        mock_run.return_value = ("Hello! Where would you like to fly?", None)
+        async def _ret(*args, **kwargs):
+            return ("Hello! Where would you like to fly?", None, None)
+        mock_run.side_effect = _ret
 
         response = client.post(
             "/chat",
@@ -39,9 +41,11 @@ class TestChatEndpoint:
         assert data["response"] == "Hello! Where would you like to fly?"
         assert data["flights"] is None
 
-    @patch("app.routers.chat.run_conversation")
+    @patch("app.routers.chat.run_agent_session")
     def test_chat_preserves_session_id(self, mock_run):
-        mock_run.return_value = ("Got it.", None)
+        async def _ret(*args, **kwargs):
+            return ("Got it.", None, None)
+        mock_run.side_effect = _ret
 
         response = client.post(
             "/chat",
@@ -50,9 +54,11 @@ class TestChatEndpoint:
         data = response.json()
         assert data["session_id"] == "test-session"
 
-    @patch("app.routers.chat.run_conversation")
+    @patch("app.routers.chat.run_agent_session")
     def test_chat_generates_session_id_when_missing(self, mock_run):
-        mock_run.return_value = ("Welcome!", None)
+        async def _ret(*args, **kwargs):
+            return ("Welcome!", None, None)
+        mock_run.side_effect = _ret
 
         response = client.post(
             "/chat",
@@ -62,7 +68,7 @@ class TestChatEndpoint:
         assert data["session_id"]  # non-empty
         assert len(data["session_id"]) > 0
 
-    @patch("app.routers.chat.run_conversation")
+    @patch("app.routers.chat.run_agent_session")
     def test_chat_returns_flights_when_present(self, mock_run):
         from app.schemas.flight import FlightOption, FlightSegment
 
@@ -85,7 +91,10 @@ class TestChatEndpoint:
             score=0.2,
             airline="AA",
         )
-        mock_run.return_value = ("Here are your options:", [flight])
+
+        async def _ret(*args, **kwargs):
+            return ("Here are your options:", [flight], None)
+        mock_run.side_effect = _ret
 
         response = client.post(
             "/chat",
@@ -97,13 +106,17 @@ class TestChatEndpoint:
         assert data["flights"][0]["price"] == 350.0
         assert data["flights"][0]["airline"] == "AA"
 
-    @patch("app.routers.chat.run_conversation")
+    @patch("app.routers.chat.run_agent_session", new_callable=AsyncMock)
     def test_chat_session_accumulates_messages(self, mock_run):
-        mock_run.return_value = ("First response", None)
+        # AsyncMock: each await returns the next side_effect value (the 3-tuple)
+        mock_run.side_effect = [
+            ("First response", None, None),
+            ("Second response", None, None),
+        ]
+
         resp1 = client.post("/chat", json={"session_id": "acc", "message": "msg1"})
         sid = resp1.json()["session_id"]
 
-        mock_run.return_value = ("Second response", None)
         client.post("/chat", json={"session_id": sid, "message": "msg2"})
 
         # Session should have user + assistant messages from both turns

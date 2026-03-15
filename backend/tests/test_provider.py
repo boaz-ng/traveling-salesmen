@@ -93,43 +93,21 @@ class TestToolFormats:
 
 
 class TestProviderFactory:
-    """Tests for the orchestrator's provider factory."""
+    """Tests for the orchestrator's provider factory.
 
+    The app now uses agent_runner.run_agent_session (Claude Agent SDK) instead of
+    orchestrator.get_provider(). These tests are skipped; provider selection is
+    only relevant when using the legacy direct-API path.
+    """
+
+    @pytest.mark.skip(reason="orchestrator no longer has get_provider(); app uses agent_runner")
     def test_factory_creates_qwen_provider(self):
-        from app.llm import orchestrator
+        pass
 
-        orchestrator._provider_instance = None
-        with patch("app.llm.orchestrator.settings") as mock_settings:
-            mock_settings.llm_provider = "qwen"
-            mock_settings.qwen_api_key = "test-key"
-            mock_settings.qwen_base_url = ""
-            mock_settings.llm_model = ""
-            provider = orchestrator.get_provider()
-            from app.llm.qwen_provider import QwenProvider
-
-            assert isinstance(provider, QwenProvider)
-        orchestrator._provider_instance = None
-
+    @pytest.mark.skip(reason="orchestrator no longer has get_provider(); app uses agent_runner")
     def test_factory_creates_anthropic_provider(self):
-        from app.llm import orchestrator
+        pass
 
-        orchestrator._provider_instance = None
-        with patch("app.llm.orchestrator.settings") as mock_settings:
-            mock_settings.llm_provider = "anthropic"
-            mock_settings.anthropic_api_key = "test-key"
-            mock_settings.llm_model = ""
-            provider = orchestrator.get_provider()
-            from app.llm.anthropic_provider import AnthropicProvider
-
-            assert isinstance(provider, AnthropicProvider)
-        orchestrator._provider_instance = None
-
+    @pytest.mark.skip(reason="orchestrator no longer has get_provider(); app uses agent_runner")
     def test_factory_raises_on_unknown_provider(self):
-        from app.llm import orchestrator
-
-        orchestrator._provider_instance = None
-        with patch("app.llm.orchestrator.settings") as mock_settings:
-            mock_settings.llm_provider = "unknown"
-            with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
-                orchestrator.get_provider()
-        orchestrator._provider_instance = None
+        pass

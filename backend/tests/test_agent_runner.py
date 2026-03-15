@@ -1,8 +1,9 @@
-from typing import Any, AsyncGenerator, Dict, List, Tuple
+from typing import Any, AsyncGenerator
 
 import pytest
 
-from app.llm.agent_runner import run_agent_session, tool_search_flights
+from app.llm.agent_runner import run_agent_session
+from app.llm.provider import handle_tool_call
 from app.schemas.flight import FlightOption, FlightSegment
 
 
@@ -13,41 +14,43 @@ class DummyMessage:
         self.result = result
 
 
-async def _dummy_query(prompt: Any, options: Any) -> AsyncGenerator[DummyMessage, None]:
-    """Fake query function that immediately yields a single result message."""
+async def _dummy_query(prompt: Any, options: Any) -> AsyncGenerator[Any, None]:
+    """Fake query function that yields a ResultMessage so run_agent_session sets assistant_text."""
+    from claude_agent_sdk.types import ResultMessage
+
     _ = prompt, options  # unused in this simple stub
-    yield DummyMessage(result="Test response from dummy agent")
+    yield ResultMessage(
+        subtype="result",
+        duration_ms=0,
+        duration_api_ms=0,
+        is_error=False,
+        num_turns=1,
+        session_id="test",
+        result="Test response from dummy agent",
+    )
 
 
 @pytest.mark.asyncio
 async def test_run_agent_session_uses_dummy_query(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_agent_session should surface the final result text from the agent."""
 
-    async def _run_with_dummy(messages: List[Dict[str, Any]]) -> Tuple[str, List[FlightOption] | None]:
-        # Inline wrapper that swaps out the real query with our dummy implementation.
-        from claude_agent_sdk import query as real_query  # type: ignore[unused-import]
+    from app.llm import agent_runner
 
-        from app.llm import agent_runner
+    monkeypatch.setattr(agent_runner, "query", _dummy_query)
 
-        async def _wrapped_query(*args: Any, **kwargs: Any):
-            return _dummy_query(*args, **kwargs)
-
-        monkeypatch.setattr(agent_runner, "query", _wrapped_query)
-        return await agent_runner.run_agent_session(messages)
-
-    text, flights = await _run_with_dummy(
+    text, flights, parsed = await run_agent_session(
         [{"role": "user", "content": "Find me a cheap flight."}]
     )
 
     assert "Test response from dummy agent" in text
     assert flights is None
+    assert parsed is None
 
 
-@pytest.mark.asyncio
-async def test_tool_search_flights_bridges_to_handle_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    """search_flights tool should delegate to handle_tool_call and return text."""
-    from app.llm import agent_runner
-
+def test_search_flights_handle_tool_call_returns_valid_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """search_flights via handle_tool_call returns (json_str, list[FlightOption])."""
     dummy_flight = FlightOption(
         price=100.0,
         currency="USD",
@@ -69,22 +72,25 @@ async def test_tool_search_flights_bridges_to_handle_tool_call(monkeypatch: pyte
         airline="TestAir",
     )
 
-    def fake_handle_tool_call(tool_name: str, tool_input: Dict[str, Any]):
-        assert tool_name == "search_flights"
-        assert "origin_airports" in tool_input
-        return ("[{}]".format(dummy_flight.model_dump_json()), [dummy_flight])
+    def fake_search(_intent):
+        return [dummy_flight]
 
-    monkeypatch.setattr(agent_runner, "handle_tool_call", fake_handle_tool_call)
+    # Patch where handle_tool_call imports it from
+    monkeypatch.setattr("app.llm.provider.search_flights", fake_search)
 
-    result = await tool_search_flights(
+    result_json, flights = handle_tool_call(
+        "search_flights",
         {
             "origin_airports": ["JFK"],
             "destination_airports": ["LAX"],
             "departure_date_start": "2025-01-01",
             "departure_date_end": "2025-01-02",
-        }
+        },
     )
 
-    assert "content" in result
-    assert isinstance(result["content"], list)
+    assert isinstance(result_json, str)
+    assert isinstance(flights, list)
+    assert len(flights) == 1
+    assert isinstance(flights[0], FlightOption)
+    assert flights[0].airline == "TestAir"
 

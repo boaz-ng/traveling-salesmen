@@ -14,6 +14,8 @@ Seams tested:
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from app.flights.regions import resolve_region
 from app.flights.scoring import score_flights
 from app.llm.provider import handle_tool_call
@@ -159,24 +161,35 @@ class TestFlightsSchemasContract:
 
 
 class TestAPIOrchestratorContract:
-    """The chat router and orchestrator must agree on signatures."""
+    """The chat router and agent_runner must agree on signatures."""
 
-    def test_run_conversation_returns_expected_tuple(self):
-        """Verify the return type expected by the chat router."""
-        from app.llm.orchestrator import run_conversation
-        from app.llm.provider import LLMProvider
+    @pytest.mark.asyncio
+    async def test_run_conversation_returns_expected_tuple(self):
+        """Verify run_agent_session return type used by the chat router."""
+        from claude_agent_sdk.types import ResultMessage
 
-        class FakeProvider(LLMProvider):
-            def run_conversation(self, messages):
-                messages.append({"role": "assistant", "content": "fake"})
-                return "fake response", None
+        from app.llm.agent_runner import run_agent_session
 
-        with patch("app.llm.orchestrator._provider_instance", FakeProvider()):
-            text, flights = run_conversation(
+        with patch("app.llm.agent_runner.query") as mock_query:
+            async def _fake_query(*args, **kwargs):
+                yield ResultMessage(
+                    subtype="result",
+                    duration_ms=0,
+                    duration_api_ms=0,
+                    is_error=False,
+                    num_turns=1,
+                    session_id="test",
+                    result="fake response",
+                )
+
+            mock_query.side_effect = _fake_query
+
+            text, flights, parsed = await run_agent_session(
                 [{"role": "user", "content": "hello"}]
             )
             assert isinstance(text, str)
             assert flights is None or isinstance(flights, list)
+            assert parsed is None or hasattr(parsed, "origin")  # ParsedRequirements-like
 
     def test_chat_response_accepts_orchestrator_output(self):
         """ChatResponse must be constructable from orchestrator return values."""

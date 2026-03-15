@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Dict, List, Tuple
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, query, tool
@@ -21,8 +22,6 @@ from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock
 
 from app.config import settings
 from app.llm.prompts import SYSTEM_PROMPT
-
-logger = logging.getLogger(__name__)
 from app.llm.provider import handle_tool_call
 from app.llm.tools import (
     _RESOLVE_REGION_DESCRIPTION,
@@ -34,6 +33,8 @@ from app.llm.tools import (
 )
 from app.schemas.chat import ParsedRequirements
 from app.schemas.flight import FlightOption
+
+logger = logging.getLogger(__name__)
 
 _last_flights: List[FlightOption] | None = None
 _last_requirements: ParsedRequirements | None = None
@@ -132,8 +133,8 @@ async def run_agent_session(
     _last_flights = None
     _last_requirements = None
 
-    # Pass API key to the Claude Code CLI subprocess (it reads from env)
-    env: Dict[str, str] = {}
+    # Pass API key to Claude CLI subprocess; inherit env (e.g. PATH) so `claude` is found.
+    env: Dict[str, str] = dict(os.environ)
     if settings.anthropic_api_key and settings.anthropic_api_key.strip():
         env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key.strip()
 
@@ -162,19 +163,24 @@ async def run_agent_session(
             elif isinstance(message, ResultMessage) and message.result and not assistant_text:
                 assistant_text = message.result
     except Exception as e:
+        stderr_blob = "\n".join(stderr_lines).strip() if stderr_lines else ""
         logger.exception(
             "Agent session failed: %s%s",
             str(e),
-            "\nCLI stderr:\n" + "\n".join(stderr_lines) if stderr_lines else "",
+            "\nCLI stderr:\n" + stderr_blob if stderr_blob else "",
         )
         # Return a friendly message instead of raising so we respond 200, not 500
-        assistant_text = (
-            "I couldn't complete that request. Please check that:\n"
-            "1. **ANTHROPIC_API_KEY** is set in your `.env` file (at the project root).\n"
-            "2. The Claude Code CLI is installed: `npm install -g @anthropic-ai/claude-code`\n"
-            "3. The `claude` command is on your PATH (`claude -v`).\n\n"
-            "See the server logs for more details."
+        base_msg = (
+            "I couldn't complete that request. The Claude CLI exited with an error.\n\n"
+            "**Things to check:**\n"
+            "1. **ANTHROPIC_API_KEY** in `.env` (project root) is set and has credits.\n"
+            "2. Claude Code CLI on PATH: `npm i -g @anthropic-ai/claude-code` then `claude -v`.\n"
+            "3. Run `claude -v` in a terminal to see the CLI’s own error.\n\n"
         )
+        if stderr_blob:
+            base_msg += "**CLI stderr:**\n```\n" + stderr_blob + "\n```\n"
+        base_msg += "\nServer logs have the full traceback."
+        assistant_text = base_msg
 
     return assistant_text, _last_flights, _last_requirements
 

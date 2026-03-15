@@ -43,7 +43,9 @@ async def create_wallet(name: str = "My Trip") -> dict[str, Any]:
             (wallet_id, name),
         )
         await db.commit()
-        cursor = await db.execute("SELECT id, name, created_at FROM wallets WHERE id = ?", (wallet_id,))
+        cursor = await db.execute(
+            "SELECT id, name, created_at FROM wallets WHERE id = ?", (wallet_id,)
+        )
         row = await cursor.fetchone()
     return {"id": row[0], "name": row[1], "created_at": row[2]}
 
@@ -51,7 +53,9 @@ async def create_wallet(name: str = "My Trip") -> dict[str, Any]:
 async def get_wallet(wallet_id: str) -> dict[str, Any] | None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("PRAGMA foreign_keys = ON")
-        cursor = await db.execute("SELECT id, name, created_at FROM wallets WHERE id = ?", (wallet_id,))
+        cursor = await db.execute(
+            "SELECT id, name, created_at FROM wallets WHERE id = ?", (wallet_id,)
+        )
         wallet_row = await cursor.fetchone()
         if not wallet_row:
             return None
