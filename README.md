@@ -4,7 +4,7 @@ A conversational flight search tool with an interactive trip planner. Tell it so
 
 Uses a **Claude Agent SDK** orchestration layer — the LLM decides the conversation flow, calls tools to resolve regions, search flights, and progressively update the UI with parsed requirements.
 
-Scroll down below for more details~
+Scroll down below for more details~ [YouTube Demo](https://youtu.be/j8ItaXiwd64)
 
 ![Sample flight frontend](frontend/Sample_flight_frontend.png)
 
